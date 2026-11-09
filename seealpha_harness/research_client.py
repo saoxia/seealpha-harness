@@ -90,12 +90,16 @@ class BacktestSpec:
         from decimal import Decimal, InvalidOperation
 
         try:
+            if not isinstance(self.starting_balance, str):
+                raise ValueError
             balance = Decimal(self.starting_balance)
             if not balance.is_finite() or balance <= 0:
                 raise ValueError
-        except (ValueError, InvalidOperation) as exc:
+        except (ValueError, TypeError, InvalidOperation) as exc:
             raise ValueError("Starting balance must be positive and finite") from exc
-        if not re.fullmatch(r"[A-Z]{3,8}", self.quote_currency):
+        if not isinstance(self.quote_currency, str) or not re.fullmatch(
+            r"[A-Z]{3,8}", self.quote_currency
+        ):
             raise ValueError("Invalid settlement currency")
         if not isinstance(self.parameters, dict):
             raise ValueError("Parameters must be an object")
