@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -165,7 +164,7 @@ class TaskWorkloads:
                 "--env", "HARNESS_STATE_DIR=/state",
                 "--env", "HARNESS_RESEARCH_MCP_ORIGIN=" + private_url,
                 "--env", "HARNESS_RESEARCH_MCP_TASK_ID=" + spec.task_id,
-                "--env", "HOME=/state/home",
+                "--env", "HOME=/state/homes/" + spec.task_id,
                 "--pull", "never", spec.agent_image,
                 "python", "-m", "seealpha_harness.worker",
                 "--task-id", spec.task_id,
@@ -179,15 +178,25 @@ class TaskWorkloads:
             self._remove(agent if made_agent else None,
                          bridge if made_bridge else None,
                          network if made_network else None)
-            self.revoke_lease(spec.task_id)
+            try:
+                self.revoke_lease(spec.task_id)
+            except Exception:
+                # Original provisioning failure remains authoritative;
+                # an orphan reconciler must also retry remote revocation.
+                pass
             raise
 
     def stop(self, spec: WorkloadSpec) -> None:
         """Best-effort cleanup; revoke before disconnecting containers."""
-        spec.validate()
+        # Cleanup must work even if a secret file or state directory has
+        # already been removed, but identifiers must still be safe.
+        _identity(spec.tenant_id)
+        _identity(spec.task_id)
         network, agent, bridge = spec.names()
-        self.revoke_lease(spec.task_id)
-        self._remove(agent, bridge, network)
+        try:
+            self.revoke_lease(spec.task_id)
+        finally:
+            self._remove(agent, bridge, network)
 
     def _remove(self, agent: str | None, bridge: str | None, network: str | None):
         for container in (agent, bridge):
