@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 
 _PUBLIC_ORIGIN = re.compile(r"https?://[A-Za-z0-9_.-]+(?::[0-9]{2,5})?\Z")
@@ -33,7 +34,15 @@ def build_research_profile_patch(origin: str, directory: Path) -> Path:
         "        failOnStartupError: true\n"
         "        toolCallTimeoutMs: 60000\n"
     )
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as output:
-        output.write(payload)
+    fd, staged = tempfile.mkstemp(prefix=".mcp-patch-", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            os.fchmod(output.fileno(), 0o600)
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(staged, path)
+    finally:
+        if os.path.exists(staged):
+            os.unlink(staged)
     return path
