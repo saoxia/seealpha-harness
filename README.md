@@ -74,6 +74,18 @@ python -m compileall -q seealpha_harness
 
 **重要**：独立 Engine 已有默认关闭的 Research HTTP v1 路由；但这些工具尚未接入官方 Agent SDK，也没有 Platform 授权签发及隔离的凭据代理。不能把 Engine 研究令牌注入现有不可信 Shell。详细接口与缺口见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)。本阶段不进行实机部署或真实模型调用。
 
+## Trusted Research Gateway（代码与 Mock 合同已实现）
+
+新增独立服务入口 `seealpha_harness.gateway_api:app` 和 [网关隔离设计](docs/GATEWAY.md)：
+
+- **仅限可信 Platform/Controller**：`/internal/v1/*` 使用单独 `GATEWAY_CONTROL_TOKEN` 和网关合同版本 `1`。
+- **任务级研究范围**：登记 Platform 已授权的短期 Engine Grant，绑定租户/任务、操作白名单和调用预算。
+- **固定工具调用**：数据发现、快照创建/获取/校验及开发回测；不允许任意 Engine HTTP、实盘或用户指定的文件路径。
+- **可信文件中转**：下载只保存于网关独立存储；经过完整性检查后才能由可信控制方获取，不直接暴露给 SDK Shell。
+- **独立部署材料**：`docker/gateway.Dockerfile` 不安装 DeepSeek SDK，非 root 运行。只是构建材料，尚未部署或联调。
+
+**当前不会自动启用网关**：原 `compose.yaml`、Harness API 和 Agent Worker 不会自动加载此服务，也不会收到 Engine Grant 或网关控制令牌。需要先实现真实 Platform 授权签发、控制器/Agent 的不同权限身份与网络隔离，才可接通 Agent Tools。此阶段仍只进行自动化模拟测试，不进行实际机器验收。
+
 ## 后续路线
 
 1. 先通过本地 Docker + 临时 Key 完成端到端研究任务测试；处理镜像、Session 与运行错误。
