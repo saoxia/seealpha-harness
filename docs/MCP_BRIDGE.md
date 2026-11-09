@@ -26,7 +26,7 @@ SeeAlpha Platform（待实现授权签发） → Trusted Gateway → 每任务 M
 
 网关通过固定 Engine Research API 路径调用数据发现、创建快照、查询快照、校验并中转快照，以及提交/查看/取消开发回测。Agent 的 MCP 工具分别名为 `discover_datasets`、`create_snapshot`、`get_snapshot`、`fetch_snapshot`、`submit_backtest`、`get_backtest`、`cancel_backtest`。
 
-Bridge 配置来自可信任务编排器：`BRIDGE_TASK_ID`、`BRIDGE_TASK_TOKEN`、`BRIDGE_GATEWAY_ORIGIN`、`BRIDGE_PUBLIC_ORIGIN`。Gateway 与 Engine 全局密钥绝不能注入 Agent。
+Bridge 配置来自可信任务编排器：`BRIDGE_TASK_ID`、`BRIDGE_TASK_TOKEN_FILE`（只读私有 Secret 路径，**禁止**通过 `BRIDGE_TASK_TOKEN` 环境变量传密钥）、`BRIDGE_GATEWAY_ORIGIN`、`BRIDGE_PUBLIC_ORIGIN`。Gateway 与 Engine 全局密钥绝不能注入 Agent。
 
 Agent Worker 可选读取 `HARNESS_RESEARCH_MCP_ORIGIN`、`HARNESS_RESEARCH_MCP_TASK_ID`；两项必须一起指定且后者与实际任务 ID 相等。当前 TaskManager 不传递这些变量，原 `compose.yaml` 不启动 Bridge。此部分是为未来的**独立 Agent 容器编排**准备，不能仅通过设置环境变量宣称实现强隔离。
 
@@ -36,7 +36,7 @@ Agent Worker 可选读取 `HARNESS_RESEARCH_MCP_ORIGIN`、`HARNESS_RESEARCH_MCP_
 
 - Platform 尚未实现短期研究 Grant 颁发与审批。Bridge 的匿名 MCP 入口必须由实际网络隔离保护，不能共享不同租户任务的 Sidecar。
 - Gateway 对 Grant 声明做结构检查而非验签；Engine 才是 HMAC 验证方。网关撤销不会立即撤销 Engine 已签发的令牌。
-- Bridge 源码与镜像独立，但独立容器调度、网络 ACL、凭据代持、租户数据卷边界和磁盘保留/清理仍未实现。
+- 已新增 [TASK_RUNTIME.md](TASK_RUNTIME.md) 的任务级 Docker 编排代码及 Fake Docker 测试；但正式 TaskManager 接线、可信凭据文件预置、持久状态、模型代理、网络与磁盘实际隔离验证尚未完成。
 - Agent 本身当前仍可能通过 Shell 读取自己的模型 API Key；此变更只缩小研究访问令牌权限，不解决模型密钥代持。
 - Engine 当前回测仅支持已下发开发策略及 1m/5m 合约数据；AI 生成代码不能自动获得执行或正式发布权限。
 
