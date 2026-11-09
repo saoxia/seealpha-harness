@@ -182,3 +182,37 @@ def test_sdk_worker_rejects_wrong_task_bridge(tmp_path, monkeypatch):
     monkeypatch.setenv("HARNESS_RESEARCH_MCP_TASK_ID", "another-task")
     assert execute(task["id"], store, runtime_factory=FakeHarness) == 1
     assert store.outcome_path(task["id"]).is_file()
+
+
+def test_mcp_http_handshake_and_tool_discovery(settings):
+    """Exercise the real MCP Streamable HTTP transport without an LLM."""
+    app = build_bridge(settings, transport=httpx.MockTransport(MockGateway()))
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2025-06-18",
+    }
+    with TestClient(app, base_url=PUBLIC) as client:
+        initialized = client.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "offline-test", "version": "1.0.0"},
+            },
+        })
+        assert initialized.status_code == 200, initialized.text
+        assert "serverInfo" in initialized.text
+        available = client.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+            "params": {},
+        })
+        assert available.status_code == 200, available.text
+        payload = available.json()
+        names = {item["name"] for item in payload["result"]["tools"]}
+        assert names == {
+            "discover_datasets", "create_snapshot", "get_snapshot",
+            "fetch_snapshot", "submit_backtest", "get_backtest",
+            "cancel_backtest",
+        }
+        assert TOKEN not in available.text
