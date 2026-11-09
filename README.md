@@ -1,39 +1,78 @@
 # seealpha-harness
 
-SeeAlpha 的独立 **AI 量化研发服务**。面向策略开发、数据研究、开发回测、结果分析和可视化，不负责交易执行、业务鉴权或产品主界面。
+SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究、开发回测、结果分析与可视化。它不是交易执行服务，也不维护 SeeAlpha 的用户/租户体系或正式产品 Web。
 
-> **当前状态：初始化文档阶段。** 目前仅建立工程规范、架构/安全边界及接口草案，尚无可启动的 Harness Runtime、HTTP 服务、Docker 镜像或 Engine 联调。
+> **当前阶段：单用户、本地开发原型。** HTTP v1、DeepSeek Harness Python SDK 适配、持久化 Session、单任务 Worker、取消、事件流、Markdown 成果与 Docker 已添加。尚未与 Engine / Platform 联调，**不具备多租户安全隔离或生产实盘资格**。
 
-## 三个项目的职责
+## 项目边界
 
-- [saoxia/SeeAlpha](https://github.com/saoxia/SeeAlpha)：Platform。统一 Web、用户/租户、任务授权、策略审批和运营。
-- [saoxia/seealpha-harness](https://github.com/saoxia/seealpha-harness)：AI 研发。Agent、Skills/Tools、隔离研究环境、研究成果及展示协议。
-- [saoxia/seealpha-engine](https://github.com/saoxia/seealpha-engine)：量化内核。行情/Catalog、计算/回测、风控及交易执行。
+- [saoxia/SeeAlpha](https://github.com/saoxia/SeeAlpha)：Platform，用户/租户/授权/统一 Web/策略发布审批。
+- [saoxia/seealpha-engine](https://github.com/saoxia/seealpha-engine)：量化 Engine，行情、Catalog、回测、风控及交易事实。
+- **本仓库**：AI Agent Runtime、代码执行和研究 Workspace；未来通过受控 Research API 与 Engine 通信。
 
-Platform 负责**谁能做什么**；Harness 执行授权范围内的自主研究；Engine 提供受控的量化数据与计算能力。Harness 可通过**独立的研究授权接口**与 Engine 通信，大数据不必经由 Platform 的聊天 API 搬运。
+详见 [开发规范](AGENTS.md)、[架构](docs/ARCHITECTURE.md)、[威胁模型](docs/SECURITY.md) 和[接口草案](docs/INTERFACES.md)。数据/回测 Engine Research API、复杂 Research Artifact 和 Web 接入仍是拟议能力，不能视为已实现。
 
-## 核心设计原则
+## 快速启动（开发环境）
 
-1. **不限制研究方法**：Agent 可在隔离工作区编写和运行程序、分析数据、比较策略，Engine 负责可验证的回测与交易事实。
-2. **严格限制真实权限**：不给 Agent 生产交易密钥、通用 Engine Token、Docker socket、业务数据库或主站权限。研究成果需要验证、审批后才能作为策略发布。
-3. **前端统一，成果可扩展**：正式 AI Workspace 属于 SeeAlpha Web；Harness 输出结构化事件与多种成果（代码、表格、图表、报告、交互式可视化）。
-4. **仓库和生命周期独立**：每个项目各自发布、构建 Docker 镜像，使用版本化 API/数据合同，不跨仓库 import 实现。
+支持 Docker（建议）；需要可用的 DeepSeek 兼容模型服务与临时开发凭据。
 
-## 设计文档
+```bash
+cp .env.example .env
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
+# 编辑 .env：填入随机生成的 HARNESS_API_TOKEN 和开发用 DEEPSEEK_API_KEY
+docker compose build
+docker compose up -d
+curl http://127.0.0.1:8777/health
+```
 
-- [AGENTS.md](AGENTS.md)：工程开发规范与验证要求
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：三项目边界、控制/数据面、AI Workspace
-- [docs/SECURITY.md](docs/SECURITY.md)：威胁模型、隔离与交易权限边界
-- [docs/INTERFACES.md](docs/INTERFACES.md)：Harness API v1、Engine 研究能力、Research Artifact v1 的**草案**
+服务只映射到宿主 `127.0.0.1:8777`，容器内使用非 root 用户；`./.local/state` 持久化任务/Session/工作区。Docker 配置了只读根文件系统、权限削减、资源限额和任务超时。但**SDK 的 shell 仍能修改容器内对其可见的文件**，本原型将控制进程和 Agent 工作负载放在同一容器与用户身份中，不能将它用于其他客户或不可信多租户任务。模型 Key 目前会进入运行 Worker 的环境，可能被 Agent Shell 读取，因此只能使用限额明确、可轮换的测试密钥，不接入私有行情、交易密钥、生产网络或真实账户。上游 `sdk-minimal` 还可能向模型提供部分 Session 日志，敏感研究数据不应在此原型中处理。
 
-## 建议实施次序（均尚未实现）
+## HTTP v1
 
-1. 固定本仓库开发规范和首个纵向能力的验收标准。
-2. 接入 [DeepSeek Harness 官方 Python SDK](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md)，在隔离工作区跑通单个可恢复 Session。
-3. 实现可独立部署的 API + Docker（任务创建/查询/事件/取消/成果），先完成安全及契约测试。
-4. 通过受控数据读取与**开发**回测接口对接 Engine，构建首个策略研究闭环。
-5. 让 SeeAlpha Web 在 RESEARCH 中消费 Harness 事件和成果；正式发布仍由 Platform 人工审批。
+所有 `/v1/*` 接口要求 `Authorization: Bearer <HARNESS_API_TOKEN>` 和 `X-SeeAlpha-Harness-Contract-Version: 1`。仅 `/health` 不要求鉴权。任务一次只运行一个，第二个并发请求返回 409。
 
-DeepSeek Harness 是预览软件，尚未完成安全审计，不能用其自带权限机制代替容器/VM 和服务端授权。参考[上游安全说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/SAFETY.md)。
+```bash
+TOKEN='使用 .env 中的 HARNESS_API_TOKEN'
+BASE=http://127.0.0.1:8777
+curl -sS -X POST "$BASE/v1/tasks" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-SeeAlpha-Harness-Contract-Version: 1" \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"使用 Python 生成一个简单的时间序列测试并解释代码。"}'
+```
 
-**本仓库不包含上游 DeepSeek Harness 的源码副本**；后续优先作为 SDK 使用，避免不必要的 Fork。
+响应返回 `id`。用同样的两个请求头调用：
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/v1/tasks/{id}` | 状态、最新回答、错误码 |
+| `GET` | `/v1/tasks/{id}/events?after=0` | SSE 进度、终态和游标恢复 |
+| `POST` | `/v1/tasks/{id}/cancel` | 尝试取消（状态可先返回 cancelling） |
+| `POST` | `/v1/tasks/{id}/continue` | 已完成 Session 续接，body 为新的 `{"prompt":"..."}` |
+| `GET` | `/v1/tasks/{id}/artifacts` | 已发布 Markdown 成果清单 |
+| `GET` | `/v1/tasks/{id}/artifacts/summary-1` | 第一轮结果文件 |
+
+SDK 保存 Session 在独立 `homes/{id}`，工作区在 `workspaces/{id}`。任务恢复遵守**显式续接**：进程崩溃/服务重启时将非终态标为 `interrupted`，不会自动重放 Prompt 或恢复正在执行的 Shell；目前只允许从 `completed` 状态续接。
+
+模型活动通知仅输出**计数型进度**，不转发原始 SDK 事件、Shell 参数、密钥或工具输出。当前 Artifact 仅保存每轮最终 Markdown 回答，Agent 在工作区生成的其他文件还未实现审批导出；不能把工作目录视为可信制品仓库。
+
+## 本地测试
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install '.[test]'
+python -m pytest -q
+python -m compileall -q seealpha_harness
+```
+
+这些测试使用假的 SDK，不调用模型、不需要 API Key。GitHub Actions 另外构建镜像并验证无模型请求的 `/health`。真实 DeepSeek 推理与完整隔离验证仍需要用户在自己的开发环境中执行。
+
+## 后续路线
+
+1. 先通过本地 Docker + 临时 Key 完成端到端研究任务测试；处理镜像、Session 与运行错误。
+2. 将控制器与**不可信 Agent Worker**分离成不同权限/容器或 VM，引入受控模型网关、租户与工具权限，再考虑真实用户部署。
+3. 定义并实现 Engine 研究专用授权、数据快照与开发回测接口；不直接暴露现有通用 Engine Token。
+4. SeeAlpha Web 通过 Platform API 接收 Harness 事件与 Artifact，完成完整策略研发闭环。
+
+上游 SDK 参考：[DeepSeek Harness Python SDK](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md)。

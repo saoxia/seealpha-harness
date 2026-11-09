@@ -1,6 +1,6 @@
 # 服务与研究成果合同草案
 
-> **状态：proposal / v1 draft，尚未实现、发布或冻结。** 本文件规定协作方向，不代表 SeeAlpha Engine 已经拥有下列 Research API，也不对外承诺 URL 稳定。
+> **状态：部分实现，仍未冻结为生产合同。** 已在本仓库实现单用户本地开发版 Harness HTTP v1（任务创建/查询/续接/取消、SSE、Markdown 成果）；以下租户授权、资源预算、Engine Research API、结构化 Artifact 与 Web 联动仍是设计草案。未完成生产安全验收。
 
 ## 1. Platform ↔ Harness：任务与会话合同
 
@@ -13,7 +13,7 @@
 | GET | `/v1/tasks/{task_id}` | 状态、Session 与成果索引 |
 | POST | `/v1/tasks/{task_id}/cancel` | 幂等取消，不伪造已停止 |
 | GET | `/v1/tasks/{task_id}/events` | SSE 事件流，支持游标恢复和有界重放 |
-| GET | `/v1/tasks/{task_id}/artifacts` | 带权限与来源的成果清单 |
+| GET | `/v1/tasks/{task_id}/artifacts` | 本地原型仅列出最终 Markdown 成果 |\n| GET | `/v1/tasks/{task_id}/artifacts/{artifact_id}` | 下载单个已发布成果 |\n| POST | `/v1/tasks/{task_id}/continue` | 在成功完成的持久化 Session 上续接新一轮 Prompt |
 
 协议使用 `X-SeeAlpha-Harness-Contract-Version: 1`；请求和响应需验证版本。不兼容时明确拒绝，不静默回退。与 Engine 的 `X-SeeAlpha-Engine-Contract-Version: 2` 相互独立。
 
@@ -33,13 +33,13 @@
 }
 ```
 
-实际授权主体、租户 ID 与任务范围必须由 Platform 经**可验证、短期、绑定任务的服务端授权**提供，不能信任模型生成、浏览器直传或上述 `capabilities` 字符串本身。Harness 仅接受已验证的上限内请求；资源和配额以服务端策略为准，字段尚未冻结。
+**现有本地原型的实际任务请求只有 `prompt` 字段，且使用单一静态 Bearer 服务令牌，没有独立租户/授权/资源范围。** 上述 JSON 是未来合同候选，不能当作当前可用请求。实际授权主体、租户 ID 与任务范围必须由 Platform 经**可验证、短期、绑定任务的服务端授权**提供，不能信任模型生成、浏览器直传或上述 `capabilities` 字符串本身。Harness 仅接受已验证的上限内请求；资源和配额以服务端策略为准，字段尚未冻结。
 
 ### 状态与事件
 
 推荐状态 `queued | running | awaiting_approval | completed | failed | cancelling | cancelled`，并保留异常中断/未知状态的真实证据。
 
-事件包含 `task_id`、单调递增 `sequence`、`timestamp`、`type`、`payload`。候选类型：`message_delta`、`progress`、`tool_summary`、`artifact_ready`、`approval_requested`、`error`、`completed`；工具原始参数、敏感环境变量不直接发送给浏览器。SSE 可按游标重连，去重不靠客户端猜测。
+事件包含 `task_id`、单调递增 `sequence`、`timestamp`、`type`、`payload`。候选类型：`message_delta`、`progress`、`tool_summary`、`artifact_ready`、`approval_requested`、`error`、`completed`；当前原型仅发送 `progress` 和 `terminal`（不发送原始通知内容）；工具原始参数、敏感环境变量不直接发送给浏览器。SSE 可按游标重连，去重不靠客户端猜测。
 
 取消与任务超时是状态机操作，不能仅依赖 HTTP 连接断开；重复提交需幂等，任务恢复不重复发起未经确认的外部动作。
 
