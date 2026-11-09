@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 
+from .mcp_profile import build_research_profile_patch
 from .store import TaskStore, atomic_json
 
 
@@ -24,12 +25,25 @@ def execute(task_id: str, store: TaskStore, *, runtime_factory=None) -> int:
             store.append_event(task_id, "progress", {"stage": "agent_active", "notifications": count})
 
     try:
+        runtime_options = {}
+        bridge_origin = os.environ.get("HARNESS_RESEARCH_MCP_ORIGIN")
+        bridge_task = os.environ.get("HARNESS_RESEARCH_MCP_TASK_ID")
+        if bridge_origin or bridge_task:
+            # The trusted provisioner must set BOTH values for a separate
+            # task-bound Agent container. Fail closed on mismatched identities.
+            if not bridge_origin or bridge_task != task_id:
+                raise ValueError("Research MCP bridge task identity mismatch")
+            patch = build_research_profile_patch(
+                bridge_origin, store.home(task_id) / "patches",
+            )
+            runtime_options["patches"] = (str(patch),)
         with runtime_factory(
             dsh_home=str(store.home(task_id)),
             cwd=str(store.workspace(task_id)),
             provider=os.environ.get("HARNESS_PROVIDER", "deepseek-official"),
             model=os.environ.get("HARNESS_MODEL", "deepseek-v4-flash"),
             profile=os.environ.get("HARNESS_PROFILE", "sdk-minimal"),
+            **runtime_options,
         ) as harness:
             if task["mode"] == "resume":
                 session = harness.resume_session(task_id)
