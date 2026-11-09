@@ -1,6 +1,6 @@
-# Engine Research Client — pre-integration contract (proposed)
+# Engine Research Client — Engine v1 server available, integration pending
 
-> This is the **Harness-side contract implementation plus mock tests**, not an implemented Engine API. Do not point it at a trading/production Engine. No human-machine or model integration acceptance has been performed.
+> This is the **Harness client and mock contract tests**. Independent [seealpha-engine Research API v1](https://github.com/saoxia/seealpha-engine/blob/main/docs/RESEARCH_API.md) is now implemented **opt-in, default disabled**, but Platform grant issuance, isolated Harness tool gateway and cross-service acceptance have **not** been implemented. Do not point it at a trading/production Engine.
 
 ## Trust boundary
 
@@ -10,7 +10,7 @@ Engine must enforce the grant independently on *every* request: tenant, task, de
 
 ## Wire protocol
 
-These routes are **proposed** to be implemented by `seealpha-engine`; they are not available today. They intentionally live under `/research/v1` rather than generic administrative Engine endpoints.
+These routes are implemented by the independent Engine service when a dedicated research signing key is configured on a pinned **development** tenant; they are **not enabled by default**. They intentionally live under `/research/v1` rather than generic administrative Engine endpoints.
 
 Every request sends:
 - `Authorization: Bearer <task-scoped-research-token>`
@@ -19,7 +19,7 @@ Every request sends:
 
 Every **successful** Engine response must echo both version headers; a missing/mismatched header, 426, unexpected JSON, redirect, oversized response, or invalid identity fails closed. 401/403 are denied, 409 is a task conflict, and 429/502/503/504 are unavailable. Errors are sanitized, not echoed from Engine response bodies.
 
-| Method | Proposed route | Purpose |
+| Method | Research route (opt-in) | Purpose |
 | --- | --- | --- |
 | `GET` | `/research/v1/datasets` | Discover authorized dataset metadata; response `{"datasets":[{"id":"...",...}]}` |
 | `POST` | `/research/v1/snapshots` | Request immutable Parquet subset by `dataset_id`, `start`, `end`; response includes `snapshot_id` |
@@ -29,7 +29,7 @@ Every **successful** Engine response must echo both version headers; a missing/m
 | `GET` | `/research/v1/backtests/{id}` | Get actual Engine status/result |
 | `POST` | `/research/v1/backtests/{id}/cancel` | Request cancellation; return observed task state |
 
-The proposed backtest payload uses `purpose=development`, `execution=simulation`, `strategy_ref`, `dataset_refs`, `start`, `end`, `starting_balance`, `quote_currency`, `parameters`, and `idempotency_key`. A strategy reference is **not** executable code or a command; Engine must require an approved/reviewed development strategy artifact and validate the canonical fingerprint of repeated requests.
+The current backtest payload uses `purpose=development`, `execution=simulation`, `strategy_ref`, `dataset_refs`, `start`, `end`, `starting_balance`, `quote_currency`, `parameters`, and `idempotency_key`. Currently `strategy_ref` must be `account:<account_id>` for a strategy already issued to that development account. The server accepts exactly one `futures_um:<symbol>:1m|5m` dataset and `parameters={}`; it uses the existing TaskCoordinator queue, not arbitrary strategy code. The Engine verifies issued-development access and idempotent request identity. More general strategies, timeframes and parameterized runs remain future work.
 
 This client does not perform dynamic SQL, custom shell calls or arbitrary HTTP. More advanced research methods are developed by the Agent in its own isolated Python workspace against **authorized data snapshots**, not by multiplying algorithm-specific Engine APIs.
 
