@@ -61,7 +61,7 @@
 | `backtests.get` | 获取任务状态、报告/成交/权益及可验证结果 |
 | `backtests.cancel` | 尝试取消，维护 Engine 的真实终态 |
 
-这里的名称是**能力名，不是已经存在的 HTTP endpoint**；实际路由、鉴权、数据格式需与独立 Engine 项目共同设计并版本化。
+这里的名称是**能力名，不是已经存在的 HTTP endpoint**。Harness 仓库已实现对应的**拟议客户端与模拟契约测试**，约定 `/research/v1/*` 路由和 `X-SeeAlpha-Research-Contract-Version: 1`；Engine 服务端和真实租户授权**均未实现**，不得把该客户端连到生产通用 Engine API。详细请求和响应参见 [ENGINE_RESEARCH_CLIENT.md](ENGINE_RESEARCH_CLIENT.md)。
 
 数据量小时允许查询 API；海量 Tick/Bar/期权数据优先使用具有时效/哈希/范围/权限约束的 Arrow/Parquet 快照或等效数据通道。Harness 在自身沙箱中使用 Python/DuckDB/Polars，自由研究因子和算法。Engine 自己负责回测计算及报告事实。
 
