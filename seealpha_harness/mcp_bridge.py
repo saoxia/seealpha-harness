@@ -257,13 +257,42 @@ def build_bridge(
         except ValueError:
             raise HTTPException(404, "Snapshot not found") from None
 
-        def blocks():
+        # Establish Gateway authorization and status BEFORE sending 200 OK.
+        # Response streaming still fails closed on size or transport errors.
+        upstream_client = httpx.AsyncClient(
+            base_url=settings.gateway_origin,
+            headers={
+                "Authorization": f"Bearer {settings.task_token}",
+                GW_HEADER: "1",
+            },
+            timeout=httpx.Timeout(30),
+            trust_env=False, follow_redirects=False,
+            transport=transport,
+        )
+        path = (
+            f"/bridge/v1/tasks/{settings.task_id}/snapshots/"
+            f"{snapshot_id}/content"
+        )
+        try:
+            upstream = await upstream_client.send(
+                upstream_client.build_request("GET", path), stream=True,
+            )
+            client._check_response(upstream)
+        except (httpx.RequestError, BridgeError):
+            await upstream_client.aclose()
+            raise HTTPException(404, "Snapshot unavailable") from None
+
+        async def blocks():
+            count = 0
             try:
-                yield from client.stream_snapshot(snapshot_id)
-            except BridgeError:
-                # A started streaming response cannot revise its status; the
-                # client must validate the complete Parquet file and digest.
-                return
+                async for chunk in upstream.aiter_bytes():
+                    count += len(chunk)
+                    if count > MAX_SNAPSHOT:
+                        raise BridgeError("snapshot_exceeds_bridge_limit")
+                    yield chunk
+            finally:
+                await upstream.aclose()
+                await upstream_client.aclose()
 
         return StreamingResponse(
             blocks(), media_type="application/octet-stream",
