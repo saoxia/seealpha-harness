@@ -88,7 +88,7 @@ class FakeEngine:
         if request.url.path == "/research/v1/datasets":
             data = {"datasets": [{"id": DATASET, "symbol": "ETHUSDT"}]}
             if self.big_response:
-                data["padding"] = "a" * 1_200_000
+                data["datasets"][0]["symbol"] = "a" * 1_200_000
             return httpx.Response(200, headers=ENGINE_HEADERS, json=data)
         if request.url.path == "/research/v1/snapshots":
             return httpx.Response(202, headers=ENGINE_HEADERS, json={
