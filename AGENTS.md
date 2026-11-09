@@ -38,4 +38,4 @@
 
 ## 当前阶段
 
-当前为**规范与契约设计阶段**，尚未接入 DeepSeek Runtime、Docker、Engine 或 Platform 的实际服务。实施顺序见 [README](README.md)。
+当前新增**本地单用户开发原型**：DeepSeek SDK 适配、HTTP、Session、Worker 与 Docker。它尚未通过真实模型、容器安全或 Engine/Platform 集成验收，控制器与 Agent 的执行权限仍未完成强隔离。实施及限制见 [README](README.md)。
