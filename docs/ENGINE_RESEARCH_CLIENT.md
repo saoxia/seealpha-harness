@@ -45,7 +45,7 @@ The Engine implementation must include dataset version, source, time coverage, g
 
 ## CLI / developer usage
 
-The client and tool dispatcher are importable from the Harness package, but there is no user-facing CLI to query Engine and **no live Engine endpoint**. The following pseudocode illustrates intended trusted use (do not put it into the SDK worker):
+The client and tool dispatcher are importable from the Harness package, but there is no user-facing CLI to query Engine and **no configured live Engine integration from Harness**. The following pseudocode illustrates intended trusted use (do not put it into the SDK worker):
 
 ```python
 from pathlib import Path
@@ -62,12 +62,12 @@ The SDK worker does **not** receive `scoped_token`. All research tool invocation
 
 ## Contract test coverage
 
-`tests/test_research_client.py` uses `httpx.MockTransport` to validate discovery → snapshot creation → size/hash verified streaming → development backtest → status and cancellation. It covers unknown tools, path injection, improper parameters, expired/denied-like HTTP errors, missing contract headers, transport failure and oversized/corrupted responses. These tests do **not** prove that Engine implements the contract.
+`tests/test_research_client.py` uses `httpx.MockTransport` to validate discovery → snapshot creation → size/hash verified streaming → development backtest → status and cancellation. It covers unknown tools, path injection, improper parameters, expired/denied-like HTTP errors, missing contract headers, transport failure and oversized/corrupted responses. The Engine repository now implements these routes, but these Harness mock tests do **not** prove cross-repository interoperability or production safety.
 
 ## Cross-repository implementation order
 
-1. Implement Engine's research authorization and strictly limited Research API routes, bound to a development tenant.
+1. **Implemented in Engine**: opt-in research authorization and fixed Research API routes for a pinned development tenant (Engine PR #2).
 2. Have Platform issue scoped, short-lived research grants. Do not give all-purpose Engine credentials to agents.
 3. Separate Agent Shell from trusted gateway; expose only named research tools and approved artifact/data transfer.
-4. Run mock contract tests for both producer and consumer, then isolated service integration tests.
+4. **Producer and consumer mock tests exist separately**; still needed: actual cross-repository service integration tests (without live credentials).
 5. Only when the user chooses, perform real-machine and model inference acceptance.
