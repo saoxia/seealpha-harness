@@ -4,7 +4,7 @@
 
 ## Trust boundary
 
-Only a **trusted research tool gateway** may hold a short-lived Engine research capability issued on behalf of a particular Platform tenant/task. The current DeepSeek Harness worker uses an unrestricted Shell in the same Docker user context as the controller; it MUST NOT receive the research token, the gateway's environment, or a socket that grants unrestricted engine access. The module `research_tools.py` is a future gateway dispatcher, **not yet installed as a live SDK tool**.
+Only a **trusted research tool gateway** may hold a short-lived Engine research capability issued on behalf of a particular Platform tenant/task. The current DeepSeek Harness worker uses an unrestricted Shell in the same Docker user context as the controller; it MUST NOT receive the research token, the gateway's environment, or a socket that grants unrestricted engine access. The `research_tools.py` dispatcher is now hosted by the **separate trusted gateway entrypoint** `gateway_api.py` (HTTP/Mock implementation; see [GATEWAY.md](GATEWAY.md)). It is **not** installed as a live SDK tool; no Engine grant is passed to the current Agent Worker.
 
 Engine must enforce the grant independently on *every* request: tenant, task, development purpose, allowed dataset/strategy refs, operations, expiry and rate/budget; never trust unverified `tenant_id` or `purpose` strings. Do not reuse the existing all-purpose Engine HTTP bearer token. Before enabling tools for live model calls, isolate agent Shell and gateway in different security principals/containers and enforce task-specific authorization end-to-end.
 
@@ -58,7 +58,7 @@ with EngineResearchClient("https://engine-research.internal", scoped_token) as c
     catalog = tools.invoke("engine.datasets.discover", {})
 ```
 
-The SDK worker does **not** receive `scoped_token`. All research tool invocations must be routed through a trusted gateway with authorization checks; the current `ResearchTools` is not itself an isolated gateway.
+The SDK worker does **not** receive `scoped_token`. The new `gateway_api.py` provides an independent trusted HTTP entrypoint that hosts `ResearchTools`; actual deployment as a separate security principal and Agent integration are still pending. See [GATEWAY.md](GATEWAY.md).
 
 ## Contract test coverage
 
