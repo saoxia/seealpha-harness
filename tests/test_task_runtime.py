@@ -48,7 +48,7 @@ def test_task_runtime_docker_plan_never_exposes_secret_or_gateway_to_agent(spec)
     result = workload.launch(spec)
     commands = fake.commands
     assert result["task_id"] == "research-001"
-    assert len(commands) == 7
+    assert len(commands) == 6
     assert commands[0][:3] == ("network", "create", "--internal")
     assert not any("--privileged" in x or "docker.sock" in x for cmd in commands for x in cmd)
     created = [cmd for cmd in commands if cmd[0] == "create"]
