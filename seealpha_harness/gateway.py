@@ -11,7 +11,9 @@ import binascii
 import hashlib
 import json
 import re
+import secrets
 import time
+import hmac
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
@@ -120,6 +122,7 @@ class Lease:
     expires_at: int
     permitted: frozenset[str]
     remaining: int
+    bridge_token_hash: str = field(repr=False)
     client: EngineResearchClient = field(repr=False)
     tools: ResearchTools = field(repr=False)
     workspace: Path = field(repr=False)
@@ -183,16 +186,23 @@ class GatewayService:
             if task_id in self.leases:
                 raise GatewayConflict("Research task already registered")
             workspace = self._workspace(tenant_id, task_id)
+            # One-time, task-specific bridge capability. Store only a digest in
+            # the registry; the Bridge process receives the raw token once.
+            bridge_token = secrets.token_urlsafe(32)
             client = self.client_factory(engine_grant)
             try:
                 lease = Lease(
                     tenant_id=tenant_id, task_id=task_id,
                     expires_at=claims["expires_at"], permitted=permitted,
-                    remaining=max_calls, client=client,
+                    remaining=max_calls,
+                    bridge_token_hash=hashlib.sha256(
+                        bridge_token.encode("utf-8"),
+                    ).hexdigest(),
+                    client=client,
                     tools=ResearchTools(client, workspace), workspace=workspace,
                 )
                 self.leases[task_id] = lease
-                return lease.public()
+                return {**lease.public(), "bridge_token": bridge_token}
             except Exception:
                 client.close()
                 raise
@@ -207,6 +217,20 @@ class GatewayService:
         if lease is None:
             raise GatewayNotFound("Research task not registered")
         return lease
+
+    def authorize_bridge(self, task_id: str, token: str) -> None:
+        """Verify a task-only capability; never accepts gateway admin token."""
+        lease = self._find(task_id)
+        with lease.lock:
+            self._active(lease)
+            if (
+                not isinstance(token, str) or len(token) > 256
+                or not hmac.compare_digest(
+                    hashlib.sha256(token.encode("utf-8")).hexdigest(),
+                    lease.bridge_token_hash,
+                )
+            ):
+                raise GatewayDenied("Research bridge authorization rejected")
 
     @staticmethod
     def _active(lease: Lease) -> None:
