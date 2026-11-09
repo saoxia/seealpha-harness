@@ -12,6 +12,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -338,4 +339,12 @@ def build_bridge(
     return app
 
 
-app = build_bridge()
+@lru_cache(maxsize=1)
+def _configured_app():
+    # Fail closed at ASGI startup, not at Python import. Offline tests can
+    # construct an explicit mock-backed Bridge without runtime secrets.
+    return build_bridge()
+
+
+async def app(scope, receive, send):
+    await _configured_app()(scope, receive, send)
