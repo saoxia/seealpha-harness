@@ -10,7 +10,7 @@ SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究
 - [saoxia/seealpha-engine](https://github.com/saoxia/seealpha-engine)：量化 Engine，行情、Catalog、回测、风控及交易事实。
 - **本仓库**：AI Agent Runtime、代码执行和研究 Workspace；未来通过受控 Research API 与 Engine 通信。
 
-详见 [开发规范](AGENTS.md)、[架构](docs/ARCHITECTURE.md)、[威胁模型](docs/SECURITY.md) 和[接口草案](docs/INTERFACES.md)。数据/回测 Engine Research API、复杂 Research Artifact 和 Web 接入仍是拟议能力，不能视为已实现。
+详见 [开发规范](AGENTS.md)、[架构](docs/ARCHITECTURE.md)、[威胁模型](docs/SECURITY.md) 和[接口草案](docs/INTERFACES.md)。已增加 **Harness 侧 Engine Research Client 与受控工具调度草案**（仅 Mock 验证），详见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)。Engine Research API 服务端、真实租户授权、Agent 工具网关隔离、复杂 Research Artifact 和 Web 接入仍未实现，不能视为已联调。
 
 ## 快速启动（开发环境）
 
@@ -67,6 +67,12 @@ python -m compileall -q seealpha_harness
 ```
 
 这些测试使用假的 SDK，不调用模型、不需要 API Key。GitHub Actions 另外构建镜像并验证无模型请求的 `/health`。真实 DeepSeek 推理与完整隔离验证仍需要用户在自己的开发环境中执行。
+
+## 开发阶段：Engine Research Client（尚未连通）
+
+新增 `seealpha_harness/research_client.py` 与 `research_tools.py`：发现可用数据、创建/校验只读 Parquet 快照、提交开发模拟回测、读取状态和取消。协议使用 `X-SeeAlpha-Engine-Contract-Version: 2` 与独立研究合同版本 `1`；仅允许固定研究路径，不转发任意 HTTP 或实盘指令。`tests/test_research_client.py` 使用假 Engine，检查版本、拒绝、数据完整性、错误脱敏和访问范围。
+
+**重要**：目前没有真正的 Engine Research 服务端实现；这些工具尚未接入官方 Agent SDK，且不能把 Engine 研究令牌注入现有不可信 Shell。详细接口与缺口见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)。本阶段不进行实机部署或真实模型调用。
 
 ## 后续路线
 
