@@ -1,0 +1,27 @@
+# Local single-user development only. See README for known sandbox limits.
+services:
+  harness:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HARNESS_STATE_DIR: /state
+    ports:
+      - "127.0.0.1:8777:8777"
+    volumes:
+      - ./.local/state:/state
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 4g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8777/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
