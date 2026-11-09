@@ -38,4 +38,4 @@
 
 ## 当前阶段
 
-当前已有**本地单用户开发原型**：DeepSeek SDK 适配、HTTP、Session、Worker 与 Docker，且新增 Harness 侧 Engine Research Client/Tools 与模拟契约测试（见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)）。Engine Research 端点和独立授权网关未实现；**禁止**将研究凭据交给现有 Agent Worker 或将此代码当作生产集成。尚未通过真实模型、容器安全或 Engine/Platform 实机验收，控制器与 Agent 执行权限仍未完成强隔离。实施及限制见 [README](README.md)。
+当前已有**本地单用户开发原型**：DeepSeek SDK 适配、HTTP、Session、Worker 与 Docker，且新增 Harness 侧 Engine Research Client/Tools 与模拟契约测试（见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)）。独立 Engine 的 opt-in Research HTTP v1 已合并，但 Platform 颁发任务级研究授权、隔离工具网关和端到端联调未实现；**禁止**将研究凭据交给现有 Agent Worker 或将此代码当作生产集成。尚未通过真实模型、容器安全或 Engine/Platform 实机验收，控制器与 Agent 执行权限仍未完成强隔离。实施及限制见 [README](README.md)。
