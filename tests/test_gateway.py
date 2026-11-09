@@ -318,3 +318,80 @@ def test_lease_expiry_and_gateway_settings_fail_closed(gateway, tmp_path):
             control_token=CONTROL_TOKEN, engine_origin="http://evil/research/v1",
             state_root=tmp_path,
         )
+
+
+def test_bridge_uses_only_task_specific_capability(gateway):
+    client, engine, app = gateway
+    registration = register(client)
+    assert registration.status_code == 201
+    token = registration.json()["bridge_token"]
+    assert len(token) >= 40
+    assert token not in client.get(
+        f"/internal/v1/tasks/{TASK}", headers=COMMON,
+    ).text
+    headers = {
+        "Authorization": "Bearer " + token,
+        GATEWAY_HEADER: "1",
+    }
+    resource = f"/bridge/v1/tasks/{TASK}/tools/engine.datasets.discover"
+    assert client.post(resource, headers=headers, json={"arguments": {}}).json()[
+        "result"
+    ]["datasets"][0]["id"] == DATASET
+    assert client.post(resource, headers=COMMON, json={
+        "arguments": {},
+    }).status_code == 403
+    assert client.post(resource, headers={
+        "Authorization": "Bearer wrong", GATEWAY_HEADER: "1",
+    }, json={"arguments": {}}).status_code == 403
+    assert client.post(resource, headers={
+        "Authorization": "Bearer " + token,
+    }, json={"arguments": {}}).status_code == 426
+    assert client.post(
+        "/bridge/v1/tasks/other-task/tools/engine.datasets.discover",
+        headers=headers, json={"arguments": {}},
+    ).status_code == 404
+    assert client.get(
+        f"/bridge/v1/tasks/{TASK}/snapshots/snap-1/content",
+        headers=headers,
+    ).status_code == 404
+    fetch = client.post(
+        f"/bridge/v1/tasks/{TASK}/tools/engine.snapshots.fetch",
+        headers=headers, json={"arguments": {"snapshot_id": "snap-1"}},
+    )
+    assert fetch.status_code == 200, fetch.text
+    assert client.get(
+        f"/bridge/v1/tasks/{TASK}/snapshots/snap-1/content",
+        headers=headers,
+    ).content == BYTES
+    assert client.delete(f"/internal/v1/tasks/{TASK}", headers=COMMON).status_code == 204
+    n = len(engine.calls)
+    assert client.post(resource, headers=headers, json={"arguments": {}}).status_code == 404
+    assert len(engine.calls) == n
+
+
+def test_bridge_token_is_not_reused_across_leases(gateway):
+    client, _, _ = gateway
+    first = register(client)
+    assert first.status_code == 201
+    token1 = first.json()["bridge_token"]
+    other = register(client, task="research-002")
+    assert other.status_code == 201
+    token2 = other.json()["bridge_token"]
+    assert token1 != token2
+    wrong = client.post(
+        "/bridge/v1/tasks/research-002/tools/engine.datasets.discover",
+        headers={
+            "Authorization": "Bearer " + token1,
+            GATEWAY_HEADER: "1",
+        },
+        json={"arguments": {}},
+    )
+    assert wrong.status_code == 403
+    assert client.post(
+        "/bridge/v1/tasks/research-002/tools/engine.datasets.discover",
+        headers={
+            "Authorization": "Bearer " + token2,
+            GATEWAY_HEADER: "1",
+        },
+        json={"arguments": {}},
+    ).status_code == 200

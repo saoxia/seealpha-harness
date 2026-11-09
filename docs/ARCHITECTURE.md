@@ -60,6 +60,10 @@ Engine 的稳定接口聚焦**数据发现、可追溯的数据获取、回测�
 
 Harness 内部可以自主规划和多轮实验；关键资产与交易权限仍由独立信任边界把关。
 
+## Agent ↔ Research Tools（MCP Bridge 开发阶段）
+
+当前已增加 [任务级 MCP Bridge](MCP_BRIDGE.md) 及 SDK 配置 Patch，能通过官方 MCP 插件提供研究原语；只有独立的 Task Sidecar 持有任务型网关令牌，Agent 不接触 Gateway/Engine 密钥。实际 Agent/Sidecar 容器、网络、生命周期编排以及 Platform 授权签发还没有完成，现有运行方式默认不启用 MCP。
+
 ## 发布与故障语义
 
 - Harness API、Engine 研究合同、Research Artifact 合同分别版本化，不强迫三仓库同步部署。

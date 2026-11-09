@@ -38,4 +38,4 @@
 
 ## 当前阶段
 
-当前已有**本地单用户开发原型**：DeepSeek SDK 适配、HTTP、Session、Worker 与 Docker，且新增 Harness 侧 Engine Research Client/Tools 与模拟契约测试（见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)）。独立 Engine 的 opt-in Research HTTP v1 已合并，本项目新增**独立可信工具网关的代码与模拟测试**（`gateway_api.py`，详见 [网关设计](docs/GATEWAY.md)）；但 Platform 颁发任务级授权、隔离的 Agent-to-Gateway 工具桥接、实际不同权限容器部署和端到端联调未实现；**禁止**将研究凭据交给现有 Agent Worker 或将此代码当作生产集成。尚未通过真实模型、容器安全或 Engine/Platform 实机验收，控制器与 Agent 执行权限仍未完成强隔离。实施及限制见 [README](README.md)。
+当前已有**本地单用户开发原型**：DeepSeek SDK 适配、HTTP、Session、Worker 与 Docker，且新增 Harness 侧 Engine Research Client/Tools 与模拟契约测试（见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)）。独立 Engine 的 opt-in Research HTTP v1 已合并，本项目新增**独立可信工具网关的代码与模拟测试**（`gateway_api.py`，详见 [网关设计](docs/GATEWAY.md)）；并新增每任务绑定的 MCP Bridge、令牌范围验证与 SDK Profile Patch（[文档](docs/MCP_BRIDGE.md)）；但 Platform 颁发任务级授权、实际不同权限容器与网络隔离及端到端联调未实现；**禁止**将研究凭据交给现有 Agent Worker 或将此代码当作生产集成。尚未通过真实模型、容器安全或 Engine/Platform 实机验收，控制器与 Agent 执行权限仍未完成强隔离。实施及限制见 [README](README.md)。

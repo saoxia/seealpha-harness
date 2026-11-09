@@ -185,7 +185,75 @@ def build_gateway(
             filename=path.name, headers={"Cache-Control": "private, no-store"},
         )
 
+    # Bridge-facing routes deliberately accept ONLY the task-specific
+    # credential, not the privileged GATEWAY_CONTROL_TOKEN. An independent
+    # task-bound MCP Bridge holds this token outside the Agent container.
+    bridge_router = APIRouter(prefix="/bridge/v1")
+
+    def bridge_auth(
+        task_id: str, request: Request,
+        authorization: str = Header(default=""),
+        contract: str = Header(default="", alias=GATEWAY_HEADER),
+    ) -> GatewayService:
+        if contract != GATEWAY_CONTRACT:
+            raise HTTPException(426, "Research gateway contract version mismatch")
+        gateway = service(request)
+        kind, _, token = authorization.partition(" ")
+        if kind.lower() != "bearer":
+            raise HTTPException(401, "Bridge task authorization required")
+        try:
+            gateway.authorize_bridge(task_id, token)
+        except GatewayNotFound:
+            raise HTTPException(404, "Research task not registered") from None
+        except GatewayDenied:
+            raise HTTPException(403, "Bridge task authorization rejected") from None
+        return gateway
+
+    @bridge_router.post("/tasks/{task_id}/tools/{tool_name}")
+    async def bridge_tool(
+        task_id: str, tool_name: str, request: Request,
+        gateway: GatewayService = Depends(bridge_auth),
+    ):
+        body = await _decode(request, ToolBody)
+        assert isinstance(body, ToolBody)
+        try:
+            result = await run_in_threadpool(
+                gateway.invoke, task_id, tool_name, body.arguments,
+            )
+            return {"result": result}
+        except GatewayNotFound:
+            raise HTTPException(404, "Research task not registered") from None
+        except (GatewayDenied, ResearchDenied):
+            raise HTTPException(403, "Research operation not authorized") from None
+        except GatewayBudgetExceeded:
+            raise HTTPException(429, "Research budget exhausted") from None
+        except (GatewayConflict, ResearchConflict, FileExistsError):
+            raise HTTPException(409, "Research operation conflicts with current state") from None
+        except (ValueError, TypeError):
+            raise HTTPException(422, "Invalid research tool arguments") from None
+        except ResearchUnavailable:
+            raise HTTPException(503, "Engine research service unavailable") from None
+        except (ResearchIncompatible, ResearchError):
+            raise HTTPException(502, "Engine research contract or response invalid") from None
+
+    @bridge_router.get("/tasks/{task_id}/snapshots/{snapshot_id}/content")
+    def bridge_snapshot(
+        task_id: str, snapshot_id: str,
+        gateway: GatewayService = Depends(bridge_auth),
+    ):
+        try:
+            path = gateway.downloaded_file(task_id, snapshot_id)
+        except GatewayNotFound:
+            raise HTTPException(404, "Research snapshot not staged") from None
+        except GatewayDenied:
+            raise HTTPException(403, "Research snapshot access denied") from None
+        return FileResponse(
+            path, media_type="application/octet-stream",
+            filename=path.name, headers={"Cache-Control": "private, no-store"},
+        )
+
     app.include_router(router)
+    app.include_router(bridge_router)
     return app
 
 

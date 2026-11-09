@@ -86,6 +86,12 @@ python -m compileall -q seealpha_harness
 
 **当前不会自动启用网关**：原 `compose.yaml`、Harness API 和 Agent Worker 不会自动加载此服务，也不会收到 Engine Grant 或网关控制令牌。需要先实现真实 Platform 授权签发、控制器/Agent 的不同权限身份与网络隔离，才可接通 Agent Tools。此阶段仍只进行自动化模拟测试，不进行实际机器验收。
 
+## MCP Research Bridge（开发代码与 Mock 验证）
+
+新增 [任务级 MCP Bridge](docs/MCP_BRIDGE.md)：Gateway 为每个研究任务签发独立的桥接令牌，仅供独立 Sidecar 使用；Agent 不接触 Engine 或 Gateway 管理凭据，通过官方 DeepSeek Harness MCP 客户端发现七项研究工具，在自身隔离的 Python/Shell 环境里分析数据和开发策略。
+
+包含 MCP Python SDK 2 的工具服务、只读 Parquet 数据中转、不含密钥的 SDK profile patch、Agent 任务 ID 绑定及独立 Docker 构建材料。**现有 Compose 与 TaskManager 默认均不会启用 MCP**；必须先完成每任务容器/网络隔离、Platform 授权签发和安全模型凭据代持，再考虑实际集成。当前不进行实机/模型验收。
+
 ## 后续路线
 
 1. 先通过本地 Docker + 临时 Key 完成端到端研究任务测试；处理镜像、Session 与运行错误。
