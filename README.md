@@ -92,6 +92,12 @@ python -m compileall -q seealpha_harness
 
 包含 MCP Python SDK 2 的工具服务、只读 Parquet 数据中转、不含密钥的 SDK profile patch、Agent 任务 ID 绑定及独立 Docker 构建材料。**现有 Compose 与 TaskManager 默认均不会启用 MCP**；必须先完成每任务容器/网络隔离、Platform 授权签发和安全模型凭据代持，再考虑实际集成。当前不进行实机/模型验收。
 
+## 每任务 Agent / MCP Bridge Docker 编排（开发代码）
+
+新增 [任务级运行时](docs/TASK_RUNTIME.md)：可信 Controller 显式创建每任务内部网络、独立 Agent / MCP Bridge 容器、资源配额、只读 Secret 文件，以及异常回滚和任务撤销。镜像要求使用 SHA-256 固定摘要，Agent 只装载本任务状态，不接触 Gateway、Engine 或 Docker 管理权限。
+
+目前使用 Fake Docker 进行命令及失败回滚测试，**并未接入现有 TaskManager 或真实启动容器**。还需补齐任务持久运行记录、租户级密钥分发、可信模型代理、孤儿资源恢复和用户选择的实机安全验收。
+
 ## 后续路线
 
 1. 先通过本地 Docker + 临时 Key 完成端到端研究任务测试；处理镜像、Session 与运行错误。
