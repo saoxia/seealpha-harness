@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -301,7 +300,7 @@ def test_request_size_and_unknown_fields(gateway):
     assert register(client, max_calls=100).status_code == 429
 
 
-def test_lease_expiry_and_gateway_settings_fail_closed(gateway, monkeypatch, tmp_path):
+def test_lease_expiry_and_gateway_settings_fail_closed(gateway, tmp_path):
     client, engine, app = gateway
     assert register(client).status_code == 201
     before = len(engine.calls)
