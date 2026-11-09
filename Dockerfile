@@ -11,6 +11,6 @@ RUN useradd --uid 10001 --create-home --shell /bin/bash research \
     && mkdir -p /state \
     && chown research:research /state
 USER research
-ENV HARNESS_STATE_DIR=/state HOME=/home/research
+ENV HARNESS_STATE_DIR=/state HOME=/home/research XDG_CACHE_HOME=/state/cache XDG_CONFIG_HOME=/state/config
 EXPOSE 8777
 CMD ["uvicorn", "seealpha_harness.api:app", "--host", "0.0.0.0", "--port", "8777", "--workers", "1"]
