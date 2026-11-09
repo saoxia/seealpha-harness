@@ -3,7 +3,7 @@
 No Engine bearer secret belongs in an Agent's environment or filesystem.
 Instantiate this client only in a trusted, separate tool gateway after the
 Platform has issued a scoped capability and Engine can validate it.
-The upstream Engine does not implement these routes yet.
+Independent seealpha-engine now implements these opt-in routes; this client has\nnot been integrated with Platform grants or an isolated live Agent gateway.
 """
 
 from dataclasses import dataclass, field
