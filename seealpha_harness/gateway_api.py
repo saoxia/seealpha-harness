@@ -13,6 +13,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from .gateway import (
     GatewayBudgetExceeded,
@@ -149,7 +150,11 @@ def build_gateway(
         assert isinstance(body, ToolBody)
         gateway = service(request)
         try:
-            result = gateway.invoke(task_id, tool_name, body.arguments)
+            # Engine I/O and snapshot streaming are synchronous and must not
+            # block the gateway's ASGI event loop.
+            result = await run_in_threadpool(
+                gateway.invoke, task_id, tool_name, body.arguments,
+            )
             return {"result": result}
         except GatewayNotFound:
             raise HTTPException(404, "Research task not registered") from None
