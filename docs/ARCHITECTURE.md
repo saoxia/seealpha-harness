@@ -15,9 +15,9 @@
 ## 控制面 / 研究计算与数据面
 
 - **控制面**：浏览器 → SeeAlpha Web → Platform API → Harness 的认证任务 API。Platform 绑定用户和租户，裁决哪些数据/计算/工具可以使用，记录审批及任务审计。
-- **研究计算与数据面**：Harness 按已授权的研究能力 → Engine Research API（拟增加），获取可用数据和质量信息，提交开发回测、读取结果；必要时通过受限数据快照直接读取 Arrow/Parquet，而不是把海量 Tick 作为聊天 JSON 中转。
+- **研究计算与数据面**：Harness 按已授权的研究能力 → Engine Research API（已在独立 Engine 中提供默认关闭的研究 HTTP v1），获取可用数据和质量信息，提交开发回测、读取结果；必要时通过受限数据快照直接读取 Arrow/Parquet，而不是把海量 Tick 作为聊天 JSON 中转。
 - Harness 不持有 Engine 的通用内部 Bearer token，也不直接访问生产交易入口。Engine 必须自己校验租户、目的、资源范围、期限和能力；不能只信任 Harness 声称的租户 ID。
-- **过渡实现**：在 Engine 研究专用授权与数据接口尚未实现前，可先经 Platform 的现有受控回测入口；不得凭此假装直接访问授权已经完善，也不允许交给 Agent 通用 Engine v2 凭据。
+- **网关实现阶段**：已实现一个独立的 Trusted Research Gateway HTTP 入口（[设计与限制](GATEWAY.md)），可在 Mock 测试中登记短期授权、限制工具、转交数据；Platform 签发、真正独立部署与 SDK 工具接入尚未实现。不得凭此假装安全联调完成，也不允许交给 Agent 通用 Engine v2 凭据。
 - 数据不可用、版本不兼容、授权失效时应明确失败；不得自动回退到生产数据卷或另一个租户的数据。
 
 ## AI 研究能力不预设上限
