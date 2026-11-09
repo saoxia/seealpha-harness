@@ -10,6 +10,8 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import stat
+from pathlib import Path
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
@@ -64,11 +66,23 @@ class BridgeSettings:
 
     @classmethod
     def from_env(cls):
+        # A read-only, per-task secret FILE prevents the task token from
+        # appearing in Docker's inspectable container environment.
+        path_value = os.environ.get("BRIDGE_TASK_TOKEN_FILE", "")
+        if os.environ.get("BRIDGE_TASK_TOKEN", "") or not path_value:
+            raise ValueError("A task token file is required (no inline environment token)")
+        path = Path(path_value)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Bridge task token file must be a regular file")
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
+            raise ValueError("Bridge task token file must have private permissions")
+        token = path.read_text("utf-8").strip()
         return cls(
             task_id=os.environ.get("BRIDGE_TASK_ID", ""),
             gateway_origin=os.environ.get("BRIDGE_GATEWAY_ORIGIN", ""),
             public_origin=os.environ.get("BRIDGE_PUBLIC_ORIGIN", ""),
-            task_token=os.environ.get("BRIDGE_TASK_TOKEN", ""),
+            task_token=token,
         )
 
 
