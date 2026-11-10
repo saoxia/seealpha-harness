@@ -48,7 +48,10 @@ class ArtifactRegistry:
         self.root = Path(root).resolve()
 
     def _directory(self, task_id: str) -> Path:
-        return self.root / "artifacts" / task_id_checked(task_id)
+        directory = self.root / "artifacts" / task_id_checked(task_id)
+        if directory.is_symlink():
+            raise ArtifactIntegrityError("Artifact integrity check failed")
+        return directory
 
     @staticmethod
     def _format(filename: str) -> tuple[str, str, str]:
@@ -149,6 +152,7 @@ class ArtifactRegistry:
         }
         try:
             with content_path.open("xb") as output:
+                os.fchmod(output.fileno(), 0o600)
                 output.write(raw)
                 output.flush()
                 os.fsync(output.fileno())
@@ -165,6 +169,8 @@ class ArtifactRegistry:
         path = directory / (artifact_id + ".manifest.json")
         try:
             raw = self._read_regular(path)
+            if len(raw) > 4096:
+                raise ValueError
             meta = json.loads(raw)
             if not isinstance(meta, dict):
                 raise ValueError

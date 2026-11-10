@@ -170,7 +170,12 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         find_task(manager, task_id)
         with manager.lock:
             try:
-                return manager.store.import_artifact(task_id, body.source_file)
+                manifest = manager.store.import_artifact(task_id, body.source_file)
+                manager.store.append_event(task_id, "artifact_ready", {
+                    "artifact_id": manifest["artifact_id"],
+                    "kind": manifest["kind"],
+                })
+                return manifest
             except ArtifactImportError as exc:
                 raise HTTPException(422, str(exc)) from exc
             except ValueError as exc:

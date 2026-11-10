@@ -184,6 +184,10 @@ def test_authenticated_import_and_attachment_download(tmp_path):
         artifact_id = imported.json()["id"]
         assert imported.json()["approval_status"] == "unreviewed"
         assert client.get(base, headers=HEADERS).json()["artifacts"][0]["id"] == artifact_id
+        assert store.events_after(task["id"], 0)[-1]["type"] == "artifact_ready"
+        assert store.events_after(task["id"], 0)[-1]["payload"] == {
+            "artifact_id": artifact_id, "kind": "source_code",
+        }
         assert client.get(base + "/" + artifact_id).status_code == 401
         result = client.get(base + "/" + artifact_id, headers=HEADERS)
         assert result.status_code == 200
