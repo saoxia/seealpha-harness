@@ -172,23 +172,21 @@ class TaskStore:
         return {"id": f"summary-{turn}", "kind": "markdown", "mime_type": "text/markdown",
                 "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
 
+    def _artifacts(self):
+        from .artifacts import ArtifactRegistry
+        return ArtifactRegistry(self.root)
+
+    def import_artifact(self, task_id: str, source_file: str) -> dict:
+        # Importing an in-progress workspace would snapshot concurrent output.
+        if self.get(task_id)["status"] != "completed":
+            raise ValueError("Only completed tasks can import draft artifacts")
+        return self._artifacts().import_from_workspace(task_id, source_file)
+
     def list_artifacts(self, task_id: str) -> list[dict]:
-        base = self.root / "artifacts" / task_id_checked(task_id)
-        if not base.exists():
-            return []
-        items = []
-        for path in sorted(base.glob("summary-*.md")):
-            if not path.is_file() or path.is_symlink():
-                continue
-            raw = path.read_bytes()
-            items.append({"id": path.stem, "kind": "markdown", "mime_type": "text/markdown",
-                          "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
-        return items
+        return self._artifacts().list(task_id)
 
     def artifact_path(self, task_id: str, artifact_id: str) -> Path:
-        if not artifact_id.startswith("summary-") or not artifact_id[8:].isdigit():
-            raise KeyError("Artifact not found")
-        path = self.root / "artifacts" / task_id_checked(task_id) / f"{artifact_id}.md"
-        if path.is_symlink() or not path.is_file():
-            raise KeyError("Artifact not found")
-        return path
+        return self._artifacts().resolve(task_id, artifact_id)[1]
+
+    def read_artifact(self, task_id: str, artifact_id: str) -> tuple[dict, bytes]:
+        return self._artifacts().read_bytes(task_id, artifact_id)

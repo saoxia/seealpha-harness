@@ -2,7 +2,7 @@
 
 SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究、开发回测、结果分析与可视化。它不是交易执行服务，也不维护 SeeAlpha 的用户/租户体系或正式产品 Web。
 
-> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与 Markdown 成果已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
+> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与**本地 Research Artifact v1 草稿**已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
 
 ## 项目边界
 
@@ -51,12 +51,14 @@ curl -sS -X POST "$BASE/v1/tasks" \
 | `GET` | `/v1/tasks/{id}/events?after=0` | SSE 进度、终态和游标恢复 |
 | `POST` | `/v1/tasks/{id}/cancel` | 尝试取消（状态可先返回 cancelling） |
 | `POST` | `/v1/tasks/{id}/continue` | 已完成 Session 续接，body 为新的 `{"prompt":"..."}` |
-| `GET` | `/v1/tasks/{id}/artifacts` | 已发布 Markdown 成果清单 |
+| `GET` | `/v1/tasks/{id}/artifacts` | 已保存的 Artifact Manifest v1（包括历史 Markdown 摘要） |
+| `POST` | `/v1/tasks/{id}/artifacts/import` | 认证后显式导入已完成任务 `exports/` 下的一个研究草稿 |
+
 | `GET` | `/v1/tasks/{id}/artifacts/summary-1` | 第一轮结果文件 |
 
 SDK 保存 Session 在独立 `homes/{id}`，工作区在 `workspaces/{id}`。任务调度遵守**不重播已启动代码**：`starting/running/cancelling` 在服务重启后标为 `interrupted`。明确排队且从未启动的任务可保留并恢复；若可能存在遗留 Worker，队列暂停，直到操作者确认旧进程已终止并恢复。已完成 Session 才可续接。参见 [常驻运行模式](docs/RESIDENT_RUNTIME.md)。
 
-模型活动通知仅输出**计数型进度**，不转发原始 SDK 事件、Shell 参数、密钥或工具输出。当前 Artifact 仅保存每轮最终 Markdown 回答，Agent 在工作区生成的其他文件还未实现审批导出；不能把工作目录视为可信制品仓库。
+模型活动通知仅输出**计数型进度**，不转发原始 SDK 事件、Shell 参数、密钥或工具输出。每轮最终 Markdown 回答继续自动保存为 `summary-N`。其他文件**不会自动发布**：研究代码/表格/JSON/PNG/Parquet 等必须放在任务工作区 `exports/`，待任务成功完成后，由持有 Harness API 令牌的调用方通过 `POST /v1/tasks/{id}/artifacts/import` 显式登记，例如 `{"source_file":"exports/report.csv"}`。文件被复制到私有成果目录、附带 SHA-256/来源/未审查状态，最大 16 MiB；拒绝软链接、硬链接、越界路径、HTML/JS 和特殊文件。下载强制附件；**这不是策略发布审批，也不构成恶意同 UID Agent 的安全隔离**。详见 [Artifact v1](docs/ARTIFACTS.md)。
 
 ## 本地测试
 

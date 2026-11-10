@@ -38,6 +38,6 @@
 
 ## 当前阶段
 
-当前已有**一个常驻 Docker 的单用户本地研究原型**：HTTP v1、官方 DeepSeek SDK、TaskManager 进程级 Worker、独立 Session/工作区、取消与超时；研究 Client、独立可信 Gateway 和可选 MCP Bridge 处于 Mock/接口开发阶段。原“每任务新建 Docker/网络”的未接线实验代码已清理；不允许因新任务或回测重新引入按任务创建容器的默认路径。详见 [常驻运行架构](docs/RESIDENT_RUNTIME.md)。
+当前已有**一个常驻 Docker 的单用户本地研究原型**：HTTP v1、官方 DeepSeek SDK、TaskManager 进程级 Worker、独立 Session/工作区、取消与超时、可追溯本地 Artifact v1 草稿；研究 Client、独立可信 Gateway 和可选 MCP Bridge 处于 Mock/接口开发阶段。原“每任务新建 Docker/网络”的未接线实验代码已清理；不允许因新任务或回测重新引入按任务创建容器的默认路径。详见 [常驻运行架构](docs/RESIDENT_RUNTIME.md)。
 
 **特别注意**：常驻容器同 UID 的 Agent Shell 与控制面没有强安全隔离；不得把 Engine/Gateway 管理密钥、交易密钥或其他租户的数据放入其可读环境。真实 Platform/Engine 联调、可信模型代持及生产安全验证仍未完成。

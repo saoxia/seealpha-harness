@@ -1,6 +1,6 @@
 # 服务与研究成果合同草案
 
-> **状态：部分实现，仍未冻结为生产合同。** 已在本仓库实现单用户本地开发版 Harness HTTP v1（任务创建/查询/续接/取消、SSE、Markdown 成果）；以下 Platform 研究授权签发、Agent 安全网关、资源预算、结构化 Artifact 与 Web 联动仍是设计草案；独立 Engine 已有默认关闭的 Research HTTP v1 服务端代码。未完成生产安全验收。
+> **状态：部分实现，仍未冻结为生产合同。** 已在本仓库实现单用户本地开发版 Harness HTTP v1（任务创建/查询/续接/取消、SSE、结构化本地 Artifact v1 草稿）；以下 Platform 研究授权签发、Agent 安全网关、资源预算与 Web 联动仍是设计草案；独立 Engine 已有默认关闭的 Research HTTP v1 服务端代码。未完成生产安全验收。
 
 ## 1. Platform ↔ Harness：任务与会话合同
 
@@ -13,7 +13,7 @@
 | GET | `/v1/tasks/{task_id}` | 状态、Session 与成果索引 |
 | POST | `/v1/tasks/{task_id}/cancel` | 幂等取消，不伪造已停止 |
 | GET | `/v1/tasks/{task_id}/events` | SSE 事件流，支持游标恢复和有界重放 |
-| GET | `/v1/tasks/{task_id}/artifacts` | 本地原型仅列出最终 Markdown 成果 |\n| GET | `/v1/tasks/{task_id}/artifacts/{artifact_id}` | 下载单个已发布成果 |\n| POST | `/v1/tasks/{task_id}/continue` | 在成功完成的持久化 Session 上续接新一轮 Prompt |
+| GET | `/v1/tasks/{task_id}/artifacts` | 列出本地 Artifact Manifest v1（自动摘要及显式导入草稿） |\n| GET | `/v1/tasks/{task_id}/artifacts/{artifact_id}` | 下载单个已发布成果 |\n| POST | `/v1/tasks/{task_id}/continue` | 在成功完成的持久化 Session 上续接新一轮 Prompt |
 
 协议使用 `X-SeeAlpha-Harness-Contract-Version: 1`；请求和响应需验证版本。不兼容时明确拒绝，不静默回退。与 Engine 的 `X-SeeAlpha-Engine-Contract-Version: 2` 相互独立。
 
@@ -78,6 +78,8 @@
 - `interactive_html` 不能作为可信 React 组件注入主站：必须隔离源、受限 iframe、严格 CSP、权限复核、无主站会话与任意内网访问。
 - 大型文件通过经授权的文件/对象访问方式获取；事件流只包含索引和摘要，避免把整个数据集推入会话。
 - Harness 不维护正式的 SeeAlpha 产品 UI；若专用可视化成熟为稳定能力，可另行发布前端组件包。
+
+**已实现的本地子集**：`schema_version=1`，包含 `id/artifact_id`、`task_id`、`kind`、`mime_type`、`filename`、`size/size_bytes`、`sha256`、`created_at`、`source_refs`、`provenance` 和 `approval_status=unreviewed`。旧 `summary-N` 链接不变。新 `POST /v1/tasks/{id}/artifacts/import` 只允许显式导入成功完成的工作区 `exports/` 下的受限文件，并始终以附件下载；参见 [ARTIFACTS.md](ARTIFACTS.md)。**尚未实现**真实 `tenant_ref`/多租户访问控制、审批升级、跨仓库发布或 Engine 事实证明，因此不能把此本地子集称为完整产品合同。
 
 ## 4. 版本与验收
 
