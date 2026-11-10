@@ -96,7 +96,7 @@ python -m compileall -q seealpha_harness
 
 新增 [任务级运行时](docs/TASK_RUNTIME.md)：可信 Controller 显式创建每任务内部网络、独立 Agent / MCP Bridge 容器、资源配额、只读 Secret 文件，以及异常回滚和任务撤销。镜像要求使用 SHA-256 固定摘要，Agent 只装载本任务状态，不接触 Gateway、Engine 或 Docker 管理权限。
 
-目前使用 Fake Docker 进行命令及失败回滚测试，**并未接入现有 TaskManager 或真实启动容器**。还需补齐任务持久运行记录、租户级密钥分发、可信模型代理、孤儿资源恢复和用户选择的实机安全验收。
+目前使用 Fake Docker 进行命令及失败回滚测试，**并未接入现有 TaskManager 或真实启动容器**。新增可选的 [持久运行记录与显式回收](docs/TASK_RUNTIME.md)：任务启动前写入不含密钥的私有 Journal；控制器重启后可凭所有权标签只清理已登记资源，撤销失败或 Docker 不可用则保持待回收状态。该能力尚未由生产控制器自动调用；仍需租户级凭据交付、可信模型代理、正式任务状态机集成和用户选择的实机安全验收。
 
 ## 后续路线
 
