@@ -29,7 +29,7 @@ curl http://127.0.0.1:8777/health
 
 ## HTTP v1
 
-所有 `/v1/*` 接口要求 `Authorization: Bearer <HARNESS_API_TOKEN>` 和 `X-SeeAlpha-Harness-Contract-Version: 1`。仅 `/health` 不要求鉴权。任务一次只运行一个，第二个并发请求返回 409。
+所有 `/v1/*` 接口要求 `Authorization: Bearer <HARNESS_API_TOKEN>` 和 `X-SeeAlpha-Harness-Contract-Version: 1`。仅 `/health` 不要求鉴权。同一时刻只执行一个 Worker。默认忙碌时请求仍返回 409；传 `queue_if_busy: true` 可将任务持久排队，队列满时返回 429。
 
 ```bash
 TOKEN='使用 .env 中的 HARNESS_API_TOKEN'
@@ -46,13 +46,15 @@ curl -sS -X POST "$BASE/v1/tasks" \
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | `GET` | `/v1/tasks/{id}` | 状态、最新回答、错误码 |
+| `GET` | `/v1/queue` | 活动任务与等待任务 ID、容量、恢复阻断状态（不含 Prompt） |
+| `POST` | `/v1/queue/resume` | 控制器意外重启后，人工确认旧 Worker 已停止再恢复派发 |
 | `GET` | `/v1/tasks/{id}/events?after=0` | SSE 进度、终态和游标恢复 |
 | `POST` | `/v1/tasks/{id}/cancel` | 尝试取消（状态可先返回 cancelling） |
 | `POST` | `/v1/tasks/{id}/continue` | 已完成 Session 续接，body 为新的 `{"prompt":"..."}` |
 | `GET` | `/v1/tasks/{id}/artifacts` | 已发布 Markdown 成果清单 |
 | `GET` | `/v1/tasks/{id}/artifacts/summary-1` | 第一轮结果文件 |
 
-SDK 保存 Session 在独立 `homes/{id}`，工作区在 `workspaces/{id}`。任务恢复遵守**显式续接**：进程崩溃/服务重启时将非终态标为 `interrupted`，不会自动重放 Prompt 或恢复正在执行的 Shell；目前只允许从 `completed` 状态续接。
+SDK 保存 Session 在独立 `homes/{id}`，工作区在 `workspaces/{id}`。任务调度遵守**不重播已启动代码**：`starting/running/cancelling` 在服务重启后标为 `interrupted`。明确排队且从未启动的任务可保留并恢复；若可能存在遗留 Worker，队列暂停，直到操作者确认旧进程已终止并恢复。已完成 Session 才可续接。参见 [常驻运行模式](docs/RESIDENT_RUNTIME.md)。
 
 模型活动通知仅输出**计数型进度**，不转发原始 SDK 事件、Shell 参数、密钥或工具输出。当前 Artifact 仅保存每轮最终 Markdown 回答，Agent 在工作区生成的其他文件还未实现审批导出；不能把工作目录视为可信制品仓库。
 
@@ -94,7 +96,7 @@ python -m compileall -q seealpha_harness
 
 ## 常驻容器运行模式
 
-**唯一正式的 Harness 任务执行方式**为 `compose.yaml` 中的常驻 `harness` 容器：`TaskManager` 在同一容器内用 `subprocess.Popen` 启动、监控、取消单次 Worker 进程；任务结束后容器继续服务。每个任务保留独立的 `workspaces/{id}`、`homes/{id}`、持久化状态与受控结果。现有默认并发限制为 1，超时/取消终止的是进程，而不是容器。
+**唯一正式的 Harness 任务执行方式**为 `compose.yaml` 中的常驻 `harness` 容器：`TaskManager` 在同一容器内用 `subprocess.Popen` 启动、监控、取消单次 Worker 进程；任务结束后容器继续服务。每个任务保留独立的 `workspaces/{id}`、`homes/{id}`、持久化状态与受控结果。现有默认执行并发为 1；支持显式 opt-in 的有界持久待运行队列。超时/取消终止的是进程，而不是容器。
 
 之前仅用于实验、从未接入 TaskManager 的“每任务 Docker 创建 + 私有网络 + 容器回收日志”方案已移除，避免维护两套互斥的运行时。**Engine 始终作为独立常驻服务被复用，开发回测不要求新建 Engine 容器**；与 Engine 的完整研究授权联调尚未完成。
 
