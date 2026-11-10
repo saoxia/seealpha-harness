@@ -1,4 +1,7 @@
-"""Trusted local controller for one isolated development workload at a time."""
+"""Single-container local controller: one per-task Python subprocess, no Docker launches.
+
+This single-user development design is NOT a strong untrusted/multitenant sandbox.
+"""
 
 import json
 import os
@@ -68,6 +71,7 @@ class TaskManager:
     def _launch(self, task: dict) -> None:
         task_id = task["id"]
         self.store.outcome_path(task_id).unlink(missing_ok=True)
+        # The Harness container stays alive; no per-task Docker creation.
         command = [sys.executable, "-m", "seealpha_harness.worker", "--task-id", task_id]
         try:
             with open(os.devnull, "wb") as sink:

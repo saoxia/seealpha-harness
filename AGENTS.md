@@ -16,7 +16,7 @@
 - 不把 AI 限制为预先枚举的均线/因子/策略算法。允许在**隔离且已授权**的工作区生成并运行 Python、Shell、数据分析、模型训练与插件工具；执行资源、文件范围、网络、成本和权限必须受控。
 - 不默认授予生产 Engine、交易 API、账户密钥、Platform 管理权限、Docker socket 或宿主机文件访问。研究工具默认只读，回测为开发/模拟用途，策略发布和实盘启用须由 Platform 单独授权并人工确认。
 - 生成的策略代码**是不可信代码**。即使满足当前 `seealpha-package.json` / `publish()` 约定，也不表示可安全加载到拥有正式交易权限的 Engine；应在隔离环境校验，之后再按发布审批流程处理。
-- 容器配额不是完整沙箱；Docker 容器内的 Agent 若能读到文件、环境变量或网络凭据，就应视为可能访问这些资源。应优先在独立工作负载/隔离容器中运行 Shell 和第三方代码；高风险多租户执行可采用更强的 VM 隔离。
+- **常驻容器是当前单用户默认运行形态**：研究任务在同一 Harness 容器内以独立进程及工作区执行，绝不按任务创建 Docker 容器/网络。工作区和进程并非同 UID 或恶意代码间的安全边界；不得据此开放不可信多租户、生产密钥或正式执行。未来多租户需要另外设计强隔离（例如独立实例/VM），不能偷偷放松安全控制。
 - 不得为了“提高 AI 自主性”悄悄扩大真实权限；新增能力应通过能力授权/审批机制，而非绕过它。
 - 不把上游 DeepSeek Harness 的技术栈、Profile 或版本永久写死为产品契约。优先集成官方发布的 SDK；选择、升级与插件配置须经过测试，不在本仓库复制上游实现。
 
@@ -38,4 +38,6 @@
 
 ## 当前阶段
 
-当前已有**本地单用户开发原型**：DeepSeek SDK 适配、HTTP、Session、Worker 与 Docker，且新增 Harness 侧 Engine Research Client/Tools 与模拟契约测试（见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)）。独立 Engine 的 opt-in Research HTTP v1 已合并，本项目新增**独立可信工具网关的代码与模拟测试**（`gateway_api.py`，详见 [网关设计](docs/GATEWAY.md)）；并新增每任务绑定的 MCP Bridge、令牌范围验证与 SDK Profile Patch（[文档](docs/MCP_BRIDGE.md)）；本仓库已新增任务级容器编排命令与 Fake Docker 测试（[运行时](docs/TASK_RUNTIME.md)），但 Platform 授权交付、可信任务管理器接线、真实网络与凭据隔离及端到端联调仍未完成；**禁止**将研究凭据交给现有 Agent Worker 或将此代码当作生产集成。尚未通过真实模型、容器安全或 Engine/Platform 实机验收，控制器与 Agent 执行权限仍未完成强隔离。实施及限制见 [README](README.md)。
+当前已有**一个常驻 Docker 的单用户本地研究原型**：HTTP v1、官方 DeepSeek SDK、TaskManager 进程级 Worker、独立 Session/工作区、取消与超时；研究 Client、独立可信 Gateway 和可选 MCP Bridge 处于 Mock/接口开发阶段。原“每任务新建 Docker/网络”的未接线实验代码已清理；不允许因新任务或回测重新引入按任务创建容器的默认路径。详见 [常驻运行架构](docs/RESIDENT_RUNTIME.md)。
+
+**特别注意**：常驻容器同 UID 的 Agent Shell 与控制面没有强安全隔离；不得把 Engine/Gateway 管理密钥、交易密钥或其他租户的数据放入其可读环境。真实 Platform/Engine 联调、可信模型代持及生产安全验证仍未完成。

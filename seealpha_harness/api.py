@@ -63,6 +63,8 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             "service": "seealpha-harness", "contract_version": 1,
             "runtime_configured": bool(os.environ.get("DEEPSEEK_API_KEY")),
             "mode": "single-user-development",
+            "runtime_layout": "resident-container",
+            "task_execution": "subprocess",
         }
 
     @app.post("/v1/tasks", status_code=202)

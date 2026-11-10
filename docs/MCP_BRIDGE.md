@@ -1,6 +1,6 @@
 # 任务级 MCP Bridge — 安全接入说明
 
-> 当前仅为开发代码、Mock 合同与独立 Docker 构建材料；没有进行真实模型、真实 Engine 或实机验收。默认不启用。
+> 当前仅为开发代码、Mock 合同与可选独立服务构建材料；**正式 Harness 采用一个常驻容器，不会每任务启动 Agent/Bridge Docker**。此桥接未接入单容器 TaskManager，没有真实模型、真实 Engine 或实机验收。
 
 ## 独立信任链路
 
@@ -11,7 +11,7 @@ SeeAlpha Platform（待实现授权签发） → Trusted Gateway → 每任务 M
 - **Agent**：只知道任务私有 MCP URL，通过 DeepSeek Harness 官方 `@deepseek-ai/dsh-mcp-client` 获得七项工具；仍保留 Python/Shell 自由研究能力，不能获取 Gateway/Engine 密钥。
 - **Engine**：每次研究调用仍核验其短期 HMAC Grant、数据集、开发租户、策略和操作范围。研究工具不开放实盘订单或任意 HTTP。
 
-**关键部署前提**：每个任务的 MCP Bridge HTTP 接口仅允许该任务的 Agent 容器访问。MCP URL 本身没有模型侧凭据，因此必须实现独立网络命名空间/网络策略；不能公开映射到宿主或公网，不能让其他 Agent 访问相同 Sidecar。Bridge 与 Agent 必须使用不同 UID/容器，不能共享环境、凭据文件、Docker socket 或可写卷。这些运行时隔离措施尚未实施和验证。
+**关键限制**：这个早期 Bridge 方案假定每任务独立 Sidecar 网络；现在选定的**常驻单容器 Harness 不满足此假定**，所以默认不启用 Bridge。单凭不同路径、工作区或同一容器内的不同进程，不能保护 Bridge Token/Engine Grant 不受自由 Shell 读取。以后应将授权工具服务置于 Agent 容器外部的可信网络和权限边界，并重新设计任务身份认证，而不是按任务启动 Docker 或直接塞入秘密。
 
 ## 已实现的入口
 
@@ -28,7 +28,7 @@ SeeAlpha Platform（待实现授权签发） → Trusted Gateway → 每任务 M
 
 Bridge 配置来自可信任务编排器：`BRIDGE_TASK_ID`、`BRIDGE_TASK_TOKEN_FILE`（只读私有 Secret 路径，**禁止**通过 `BRIDGE_TASK_TOKEN` 环境变量传密钥）、`BRIDGE_GATEWAY_ORIGIN`、`BRIDGE_PUBLIC_ORIGIN`。Gateway 与 Engine 全局密钥绝不能注入 Agent。
 
-Agent Worker 可选读取 `HARNESS_RESEARCH_MCP_ORIGIN`、`HARNESS_RESEARCH_MCP_TASK_ID`；两项必须一起指定且后者与实际任务 ID 相等。当前 TaskManager 不传递这些变量，原 `compose.yaml` 不启动 Bridge。此部分是为未来的**独立 Agent 容器编排**准备，不能仅通过设置环境变量宣称实现强隔离。
+Agent Worker 可选读取 `HARNESS_RESEARCH_MCP_ORIGIN`、`HARNESS_RESEARCH_MCP_TASK_ID`；两项必须一起指定且后者与实际任务 ID 相等。当前 TaskManager 不传递这些变量，`compose.yaml` 不启动 Bridge。这是尚未接入的原型配置能力；不能仅设置变量就在常驻容器内宣称实现安全研究工具接入。
 
 `fetch_snapshot` 返回已校验快照在私有任务网络内的只读下载 URL，供 Agent 的 Python/DuckDB/Polars 读取；Agent 需用 Engine 提供的 SHA-256、大小重新校验完整文件。文件流中断不代表成功，Bridge 不将整个大数据文件嵌入模型对话。
 
@@ -36,10 +36,10 @@ Agent Worker 可选读取 `HARNESS_RESEARCH_MCP_ORIGIN`、`HARNESS_RESEARCH_MCP_
 
 - Platform 尚未实现短期研究 Grant 颁发与审批。Bridge 的匿名 MCP 入口必须由实际网络隔离保护，不能共享不同租户任务的 Sidecar。
 - Gateway 对 Grant 声明做结构检查而非验签；Engine 才是 HMAC 验证方。网关撤销不会立即撤销 Engine 已签发的令牌。
-- 已新增 [TASK_RUNTIME.md](TASK_RUNTIME.md) 的任务级 Docker 编排代码及 Fake Docker 测试；但正式 TaskManager 接线、可信凭据文件预置、持久状态、模型代理、网络与磁盘实际隔离验证尚未完成。
+- 曾有未接线的任务级 Docker 编排，现已按 [常驻容器方案](RESIDENT_RUNTIME.md) 删除。未来需在不增加每任务 Docker 的前提下实现可信授权代理、任务认证、撤销与数据访问限制，当前均未验收。
 - Agent 本身当前仍可能通过 Shell 读取自己的模型 API Key；此变更只缩小研究访问令牌权限，不解决模型密钥代持。
 - Engine 当前回测仅支持已下发开发策略及 1m/5m 合约数据；AI 生成代码不能自动获得执行或正式发布权限。
 
-自动化验证包括 `tests/test_gateway.py` 和 `tests/test_mcp_bridge.py`、三个镜像的独立 CI 构建。真实模型、跨容器网络和跨仓库联调由用户自行确定后续验收时间。
+自动化验证包括 `tests/test_gateway.py` 与 `tests/test_mcp_bridge.py`、各组件可选镜像的 CI 构建；**CI 构建镜像不等于运行时按任务创建容器**。真实模型、权限边界和跨仓库联调未执行。
 
 参考：[DeepSeek Harness MCP Client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)、[MCP Python SDK 2](https://py.sdk.modelcontextprotocol.io/run/asgi/)。

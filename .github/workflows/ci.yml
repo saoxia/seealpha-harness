@@ -29,7 +29,7 @@ jobs:
         run: docker build --tag seealpha-harness:mvp .
       - name: Build separate trusted gateway image (no model SDK)
         run: docker build -f docker/gateway.Dockerfile --tag seealpha-gateway:mvp .
-      - name: Build per-task MCP Bridge image without Agent SDK
+      - name: Build optional trusted MCP Bridge service image (not launched per task)
         run: docker build -f docker/mcp-bridge.Dockerfile --tag seealpha-mcp-bridge:mvp .
       - name: Smoke test HTTP health (no model request)
         run: |

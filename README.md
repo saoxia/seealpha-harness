@@ -2,7 +2,7 @@
 
 SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究、开发回测、结果分析与可视化。它不是交易执行服务，也不维护 SeeAlpha 的用户/租户体系或正式产品 Web。
 
-> **当前阶段：单用户、本地开发原型。** HTTP v1、DeepSeek Harness Python SDK 适配、持久化 Session、单任务 Worker、取消、事件流、Markdown 成果与 Docker 已添加。尚未与 Engine / Platform 联调，**不具备多租户安全隔离或生产实盘资格**。
+> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与 Markdown 成果已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
 
 ## 项目边界
 
@@ -14,7 +14,7 @@ SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究
 
 ## 快速启动（开发环境）
 
-支持 Docker（建议）；需要可用的 DeepSeek 兼容模型服务与临时开发凭据。
+使用单个长期运行的 Harness Docker 容器；需要可用的 DeepSeek 兼容模型服务与临时开发凭据。容器在首次部署和软件升级时构建/启动；**提交研究任务、取消、续接及回测均不调用 `docker create/run`**。
 
 ```bash
 cp .env.example .env
@@ -25,7 +25,7 @@ docker compose up -d
 curl http://127.0.0.1:8777/health
 ```
 
-服务只映射到宿主 `127.0.0.1:8777`，容器内使用非 root 用户；`./.local/state` 持久化任务/Session/工作区。Docker 配置了只读根文件系统、权限削减、资源限额和任务超时。但**SDK 的 shell 仍能修改容器内对其可见的文件**，本原型将控制进程和 Agent 工作负载放在同一容器与用户身份中，不能将它用于其他客户或不可信多租户任务。模型 Key 目前会进入运行 Worker 的环境，可能被 Agent Shell 读取，因此只能使用限额明确、可轮换的测试密钥，不接入私有行情、交易密钥、生产网络或真实账户。上游 `sdk-minimal` 还可能向模型提供部分 Session 日志，敏感研究数据不应在此原型中处理。
+服务只映射到宿主 `127.0.0.1:8777`，容器内使用非 root 用户；`./.local/state` 持久化任务/Session/工作区。运行模式见 [常驻容器方案](docs/RESIDENT_RUNTIME.md)。Docker 配置了只读根文件系统、权限削减、资源限额和任务超时。但**SDK 的 shell 仍能修改容器内对其可见的文件**，本原型将控制进程和 Agent 工作负载放在同一容器与用户身份中，不能将它用于其他客户或不可信多租户任务。模型 Key 目前会进入运行 Worker 的环境，可能被 Agent Shell 读取，因此只能使用限额明确、可轮换的测试密钥，不接入私有行情、交易密钥、生产网络或真实账户。上游 `sdk-minimal` 还可能向模型提供部分 Session 日志，敏感研究数据不应在此原型中处理。
 
 ## HTTP v1
 
@@ -90,19 +90,21 @@ python -m compileall -q seealpha_harness
 
 新增 [任务级 MCP Bridge](docs/MCP_BRIDGE.md)：Gateway 为每个研究任务签发独立的桥接令牌，仅供独立 Sidecar 使用；Agent 不接触 Engine 或 Gateway 管理凭据，通过官方 DeepSeek Harness MCP 客户端发现七项研究工具，在自身隔离的 Python/Shell 环境里分析数据和开发策略。
 
-包含 MCP Python SDK 2 的工具服务、只读 Parquet 数据中转、不含密钥的 SDK profile patch、Agent 任务 ID 绑定及独立 Docker 构建材料。**现有 Compose 与 TaskManager 默认均不会启用 MCP**；必须先完成每任务容器/网络隔离、Platform 授权签发和安全模型凭据代持，再考虑实际集成。当前不进行实机/模型验收。
+包含 MCP Python SDK 2 的工具服务、只读 Parquet 数据中转、不含密钥的 SDK profile patch、Agent 任务 ID 绑定及可选的独立服务构建材料。**现有单容器 Compose 与 TaskManager 默认均不会启用 MCP**。若今后启用受控研究工具，持有 Engine/Gateway 高权限凭据的服务必须部署在 Agent 不可读取其凭据的可信边界之外；**不能把 Bridge/Gateway 密钥和自由 Shell 放进同一容器来伪造隔离**。本阶段无实机或模型验收。
 
-## 每任务 Agent / MCP Bridge Docker 编排（开发代码）
+## 常驻容器运行模式
 
-新增 [任务级运行时](docs/TASK_RUNTIME.md)：可信 Controller 显式创建每任务内部网络、独立 Agent / MCP Bridge 容器、资源配额、只读 Secret 文件，以及异常回滚和任务撤销。镜像要求使用 SHA-256 固定摘要，Agent 只装载本任务状态，不接触 Gateway、Engine 或 Docker 管理权限。
+**唯一正式的 Harness 任务执行方式**为 `compose.yaml` 中的常驻 `harness` 容器：`TaskManager` 在同一容器内用 `subprocess.Popen` 启动、监控、取消单次 Worker 进程；任务结束后容器继续服务。每个任务保留独立的 `workspaces/{id}`、`homes/{id}`、持久化状态与受控结果。现有默认并发限制为 1，超时/取消终止的是进程，而不是容器。
 
-目前使用 Fake Docker 进行命令及失败回滚测试，**并未接入现有 TaskManager 或真实启动容器**。新增可选的 [持久运行记录与显式回收](docs/TASK_RUNTIME.md)：任务启动前写入不含密钥的私有 Journal；控制器重启后可凭所有权标签只清理已登记资源，撤销失败或 Docker 不可用则保持待回收状态。该能力尚未由生产控制器自动调用；仍需租户级凭据交付、可信模型代理、正式任务状态机集成和用户选择的实机安全验收。
+之前仅用于实验、从未接入 TaskManager 的“每任务 Docker 创建 + 私有网络 + 容器回收日志”方案已移除，避免维护两套互斥的运行时。**Engine 始终作为独立常驻服务被复用，开发回测不要求新建 Engine 容器**；与 Engine 的完整研究授权联调尚未完成。
+
+这是**当前单用户研究环境的工程取舍**，不是不可信多租户安全隔离：同一容器的 Agent Shell 可能读取同 UID 的工作区、环境变量及模型 Key。禁止在当前配置接入正式交易密钥、共享租户私有数据或生产执行权限。详见 [运行模式与限制](docs/RESIDENT_RUNTIME.md)。
 
 ## 后续路线
 
 1. 先通过本地 Docker + 临时 Key 完成端到端研究任务测试；处理镜像、Session 与运行错误。
-2. 将控制器与**不可信 Agent Worker**分离成不同权限/容器或 VM，引入受控模型网关、租户与工具权限，再考虑真实用户部署。
-3. 定义并实现 Engine 研究专用授权、数据快照与开发回测接口；不直接暴露现有通用 Engine Token。
+2. 保持一个常驻 Harness 容器、独立任务进程/Session；在接入正式用户或不可信客户代码之前，通过外部可信服务代持研究/模型密钥并评估额外隔离，不自动退回每任务 Docker。
+3. 接通已实现的 Engine 研究授权、数据快照与开发回测合同；不直接暴露通用 Engine Token，不创建按回测次数扩张的 Engine 容器。
 4. SeeAlpha Web 通过 Platform API 接收 Harness 事件与 Artifact，完成完整策略研发闭环。
 
 上游 SDK 参考：[DeepSeek Harness Python SDK](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md)。
