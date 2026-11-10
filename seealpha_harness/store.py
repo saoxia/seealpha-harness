@@ -61,7 +61,7 @@ class TaskStore:
     def events_path(self, task_id: str) -> Path:
         return self.root / "jobs" / (task_id_checked(task_id) + ".events.jsonl")
 
-    def create(self, prompt: str) -> dict:
+    def create(self, prompt: str, *, queue_managed: bool = False) -> dict:
         task_id = str(uuid4())
         self.workspace(task_id).mkdir(mode=0o700)
         self.home(task_id).mkdir(mode=0o700)
@@ -69,6 +69,7 @@ class TaskStore:
             "id": task_id, "status": "queued", "prompt": prompt,
             "turn": 1, "mode": "new", "created_at": utcnow(),
             "updated_at": utcnow(), "final_response": None, "error": None,
+            "queued_at": utcnow(), "queue_managed": queue_managed,
         }
         atomic_json(self.path(task_id), task)
         return task
@@ -86,17 +87,46 @@ class TaskStore:
         atomic_json(self.path(task_id), task)
         return task
 
-    def recover(self) -> None:
+    def pending_queue(self) -> list[dict]:
+        """Explicitly opted-in unstarted tasks, sorted for FIFO dispatch."""
+        pending = []
         for path in (self.root / "jobs").glob("*.json"):
-            if path.name.endswith(".outcome.json"):
+            if path.name.endswith(".outcome.json") or path.is_symlink():
+                continue
+            try:
+                task = self.get(path.stem)
+            except (ValueError, KeyError, json.JSONDecodeError):
+                continue
+            if task["status"] == "queued" and task.get("queue_managed") is True:
+                pending.append(task)
+        return sorted(pending, key=lambda t: (t.get("queued_at", ""), t["id"]))
+
+    def recover(self, *, preserve_managed_queue: bool = False) -> list[str]:
+        """Do not replay in-flight work; only explicit unstarted jobs survive.
+
+        Returns IDs that were in-flight at restart. The controller must block
+        queue dispatch until any possible detached worker is accounted for.
+        """
+        inflight = []
+        for path in (self.root / "jobs").glob("*.json"):
+            if path.name.endswith(".outcome.json") or path.is_symlink():
                 continue
             task_id = path.stem
             try:
                 task = self.get(task_id)
             except (ValueError, KeyError, json.JSONDecodeError):
                 continue
-            if task["status"] not in TERMINAL:
-                self.change(task_id, status="interrupted", error="controller_restarted")
+            if task["status"] in TERMINAL:
+                continue
+            if task["status"] == "queued" and task.get("queue_managed") is True and preserve_managed_queue:
+                continue
+            if task["status"] != "queued":
+                inflight.append(task_id)
+            self.change(task_id, status="interrupted", error="controller_restarted")
+            self.append_event(task_id, "terminal", {
+                "status": "interrupted", "error": "controller_restarted",
+            })
+        return inflight
 
     def append_event(self, task_id: str, kind: str, payload: dict) -> None:
         path = self.events_path(task_id)

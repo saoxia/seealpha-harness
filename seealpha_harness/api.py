@@ -5,12 +5,13 @@ from contextlib import asynccontextmanager
 import hmac
 import json
 import os
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from .manager import BusyError, ConflictError, TaskManager
+from .manager import BusyError, ConflictError, QueueFullError, TaskManager
 from .settings import Settings
 from .store import TERMINAL
 
@@ -22,6 +23,7 @@ CONTRACT_HEADER = "X-SeeAlpha-Harness-Contract-Version"
 class PromptBody(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     prompt: str = Field(min_length=1, max_length=20_000)
+    queue_if_busy: bool = False
 
 
 def build_app(settings: Settings | None = None) -> FastAPI:
@@ -70,8 +72,27 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/tasks", status_code=202)
     def create_task(body: PromptBody, manager: TaskManager = Depends(protected)):
         try:
-            return manager.create(body.prompt)
+            return manager.create(body.prompt, queue_if_busy=body.queue_if_busy)
         except BusyError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except QueueFullError as exc:
+            raise HTTPException(429, str(exc)) from exc
+
+    @app.get("/v1/queue")
+    def queue_status(manager: TaskManager = Depends(protected)):
+        return manager.queue_state()
+
+    class RecoveryBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        confirm_stale_workers_stopped: Literal[True]
+
+    @app.post("/v1/queue/resume")
+    def resume_queue(body: RecoveryBody, manager: TaskManager = Depends(protected)):
+        try:
+            return manager.resume_after_recovery(
+                confirm_stale_workers_stopped=body.confirm_stale_workers_stopped,
+            )
+        except (BusyError, ConflictError) as exc:
             raise HTTPException(409, str(exc)) from exc
 
     @app.get("/v1/tasks/{task_id}")
@@ -82,9 +103,13 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     def continue_task(task_id: str, body: PromptBody, manager: TaskManager = Depends(protected)):
         find_task(manager, task_id)
         try:
-            return manager.continue_task(task_id, body.prompt)
+            return manager.continue_task(
+                task_id, body.prompt, queue_if_busy=body.queue_if_busy,
+            )
         except (BusyError, ConflictError) as exc:
             raise HTTPException(409, str(exc)) from exc
+        except QueueFullError as exc:
+            raise HTTPException(429, str(exc)) from exc
 
     @app.post("/v1/tasks/{task_id}/cancel", status_code=202)
     def cancel_task(task_id: str, manager: TaskManager = Depends(protected)):
