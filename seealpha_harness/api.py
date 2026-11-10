@@ -8,10 +8,11 @@ import os
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .manager import BusyError, ConflictError, QueueFullError, TaskManager
+from .artifacts import ArtifactImportError, ArtifactIntegrityError
 from .settings import Settings
 from .store import TERMINAL
 
@@ -24,6 +25,11 @@ class PromptBody(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     prompt: str = Field(min_length=1, max_length=20_000)
     queue_if_busy: bool = False
+
+
+class ImportArtifactBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    source_file: str = Field(min_length=1, max_length=140)
 
 
 def build_app(settings: Settings | None = None) -> FastAPI:
@@ -151,7 +157,29 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/tasks/{task_id}/artifacts")
     def list_artifacts(task_id: str, manager: TaskManager = Depends(protected)):
         find_task(manager, task_id)
-        return {"artifacts": manager.store.list_artifacts(task_id)}
+        try:
+            return {"artifacts": manager.store.list_artifacts(task_id)}
+        except ArtifactIntegrityError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/v1/tasks/{task_id}/artifacts/import", status_code=201)
+    def import_artifact(
+        task_id: str, body: ImportArtifactBody,
+        manager: TaskManager = Depends(protected),
+    ):
+        find_task(manager, task_id)
+        with manager.lock:
+            try:
+                manifest = manager.store.import_artifact(task_id, body.source_file)
+                manager.store.append_event(task_id, "artifact_ready", {
+                    "artifact_id": manifest["artifact_id"],
+                    "kind": manifest["kind"],
+                })
+                return manifest
+            except ArtifactImportError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
 
     @app.get("/v1/tasks/{task_id}/artifacts/{artifact_id}")
     def read_artifact(
@@ -159,10 +187,24 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     ):
         find_task(manager, task_id)
         try:
-            path = manager.store.artifact_path(task_id, artifact_id)
+            meta, raw = manager.store.read_artifact(task_id, artifact_id)
         except KeyError as exc:
             raise HTTPException(404, "Artifact not found") from exc
-        return FileResponse(path, media_type="text/markdown", filename=path.name)
+        except ArtifactIntegrityError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        # Always an attachment. Generated Python/JSON/PNG must never be
+        # rendered as trusted same-origin active content.
+        filename = meta["filename"]
+        return Response(
+            content=raw,
+            media_type=("text/markdown" if meta["kind"] == "markdown"
+                        else "application/octet-stream"),
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+            },
+        )
 
     return app
 

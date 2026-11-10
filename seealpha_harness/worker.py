@@ -1,4 +1,4 @@
-"""One SDK Session turn per subprocess. Run only inside a disposable development container."""
+"""One SDK Session turn per process in the resident single-user Harness container."""
 
 import argparse
 import os
