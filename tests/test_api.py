@@ -13,7 +13,10 @@ HEADERS = {
 def test_auth_version_tasks_and_stream(tmp_path):
     app = build_app(Settings(token="x" * 40, state_dir=tmp_path))
     with TestClient(app) as client:
-        assert client.get("/health").status_code == 200
+        health = client.get("/health")
+        assert health.status_code == 200
+        assert health.json()["runtime_layout"] == "resident-container"
+        assert health.json()["task_execution"] == "subprocess"
         assert client.get("/v1/tasks/missing").status_code == 401
         no_version = {k: v for k, v in HEADERS.items() if k != CONTRACT_HEADER}
         assert client.post("/v1/tasks", headers=no_version, json={"prompt": "x"}).status_code == 426

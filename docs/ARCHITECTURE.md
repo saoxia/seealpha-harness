@@ -31,8 +31,8 @@ Engine 的稳定接口聚焦**数据发现、可追溯的数据获取、回测�
 ## Runtime 与部署
 
 - 首选官方 **DeepSeek Harness Python SDK** 作为 Agent Runtime；SDK 从进程内驱动 `dsh` 子进程，运行时版本/插件配置在本仓库独立管理。
-- 将 **任务调度/API** 与 **不可信研究执行环境** 在权限上区分。早期允许有限的单用户容器部署，但不可把“有 Docker”视为多租户不可信执行安全完成。
-- 每个研究任务有独立 workspace 与 Harness home/Session 归属；任务完成保留批准的成果，临时执行环境销毁或回收。会话恢复不等于自动恢复外部 Shell/浏览器进程。
+- **正式部署选择：一个常驻 Harness Docker 容器**。任务调度/API 在容器内长期运行，按任务启动/结束独立 Python Worker 进程；**不为每个任务或每次回测启动新 Docker**。这个单用户原型尚未把可信控制面与不可信 Shell 强隔离，不支持未经审查的多租户代码。
+- 每个研究任务有独立 workspace 与 Harness home/Session 归属；任务完成终止 Worker **进程**而不停止容器，保留批准的成果。会话恢复不等于自动恢复外部 Shell/浏览器进程。运行细节见 [RESIDENT_RUNTIME.md](RESIDENT_RUNTIME.md)。
 - 任务数、CPU/内存、存储、执行时间、模型调用及外部网络均可配额化；不强制第一版实现分布式调度。
 
 ## 用户界面和研究成果
@@ -62,7 +62,7 @@ Harness 内部可以自主规划和多轮实验；关键资产与交易权限仍
 
 ## Agent ↔ Research Tools（MCP Bridge 开发阶段）
 
-当前已增加 [任务级 MCP Bridge](MCP_BRIDGE.md) 及 SDK 配置 Patch，能通过官方 MCP 插件提供研究原语；只有独立的 Task Sidecar 持有任务型网关令牌，Agent 不接触 Gateway/Engine 密钥。实际 Agent/Sidecar 容器、网络、生命周期编排以及 Platform 授权签发还没有完成，现有运行方式默认不启用 MCP。
+已增加 [任务绑定 MCP Bridge](MCP_BRIDGE.md) 与 SDK Patch 作为研究工具协议实验，但**当前常驻 Harness Docker 不启用这些特权工具**。原每任务 Agent/Sidecar Docker 编排已移除。若未来接入 MCP，须使用外部可信安全边界代持授权，不能让自由 Shell 直接读取 Engine/Gateway 密钥；Platform 侧授权和端到端联调仍未完成。
 
 ## 发布与故障语义
 
