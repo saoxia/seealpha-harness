@@ -78,10 +78,17 @@ class WorkloadSpec:
             raise ValueError("Agent state must not be group/other writable")
 
     def names(self) -> tuple[str, str, str]:
-        digest = hashlib.sha256(
-            (self.tenant_id + "\x00" + self.task_id).encode("utf-8"),
-        ).hexdigest()[:22]
-        return "sah-" + digest, "sah-agent-" + digest, "sah-bridge-" + digest
+        return resource_names(self.tenant_id, self.task_id)
+
+
+def resource_names(tenant_id: str, task_id: str) -> tuple[str, str, str]:
+    """Derive stable, non-secret resource names from validated identities."""
+    _identity(tenant_id)
+    _identity(task_id)
+    digest = hashlib.sha256(
+        (tenant_id + "\x00" + task_id).encode("utf-8"),
+    ).hexdigest()[:22]
+    return "sah-" + digest, "sah-agent-" + digest, "sah-bridge-" + digest
 
 
 class DockerCommands:
@@ -125,11 +132,16 @@ class TaskWorkloads:
             self.docker.run(
                 "network", "create", "--internal", "--driver", "bridge",
                 "--label", "seealpha.runtime=research",
+                "--label", "seealpha.owner=" + network,
+                "--label", "seealpha.role=task-network",
                 network,
             )
             made_network = True
             self.docker.run(
                 "create", "--name", bridge,
+                "--label", "seealpha.runtime=research",
+                "--label", "seealpha.owner=" + network,
+                "--label", "seealpha.role=bridge",
                 "--network", network, "--network-alias", "research-sidecar",
                 "--user", _BRIDGE_USER, "--read-only",
                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
@@ -152,6 +164,9 @@ class TaskWorkloads:
             )
             self.docker.run(
                 "create", "--name", agent,
+                "--label", "seealpha.runtime=research",
+                "--label", "seealpha.owner=" + network,
+                "--label", "seealpha.role=agent",
                 "--network", network,
                 "--user", _AGENT_USER, "--read-only",
                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
