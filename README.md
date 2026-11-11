@@ -20,6 +20,8 @@ SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究
 cp .env.example .env
 python -c 'import secrets; print(secrets.token_urlsafe(32))'
 # 编辑 .env：填入随机生成的 HARNESS_API_TOKEN 和开发用 DEEPSEEK_API_KEY
+mkdir -p .local/state
+# Linux 上若目录尚未授权给容器用户：sudo chown 10001:10001 .local/state
 docker compose build
 docker compose up -d
 curl http://127.0.0.1:8777/health

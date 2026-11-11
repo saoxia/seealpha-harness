@@ -12,6 +12,9 @@ from seealpha_harness.store import atomic_json
 def test_multiple_sequential_tasks_use_python_subprocess_in_same_controller(tmp_path, monkeypatch):
     import seealpha_harness.manager as module
 
+    sdk_temp_dir = str(tmp_path / "sdk-tmp")
+    monkeypatch.setenv("TMPDIR", sdk_temp_dir)
+    monkeypatch.setenv("HARNESS_API_TOKEN", "controller-only")
     launches = []
     completed = Event()
 
@@ -30,6 +33,7 @@ def test_multiple_sequential_tasks_use_python_subprocess_in_same_controller(tmp_
         assert command[3] == "--task-id"
         assert "docker" not in command
         assert kwargs["env"]["HARNESS_STATE_DIR"] == str(tmp_path)
+        assert kwargs["env"]["TMPDIR"] == sdk_temp_dir
         assert "HARNESS_API_TOKEN" not in kwargs["env"]
         task_id = command[4]
         assert Path(kwargs["cwd"]) == tmp_path / "workspaces" / task_id

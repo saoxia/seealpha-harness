@@ -14,6 +14,7 @@ SeeAlpha Platform（未来授权与审计）
 ```
 
 - `docker compose up -d` 只负责部署或升级常驻 Harness。研究任务只调用容器内部 `subprocess.Popen([sys.executable, "-m", "seealpha_harness.worker", ...])`；`_watch` 等待退出，超时或取消时终止进程组。
+- DeepSeek SDK 在启动时需要从临时目录加载 Linux 原生模块。Compose 通过 `TMPDIR` 将它指向仅容器运行用户可访问的可执行 tmpfs `/run/harness-sdk`，保留普通 `/tmp` 的 `noexec`。自定义容器部署也需为 SDK 提供这一临时目录。
 - 每次任务创建独立 `workspaces/{uuid}` 与 `homes/{uuid}`。Session 和已发布摘要保持持久化；Worker 完成后容器仍接收下一任务。当前最大并发为 1。默认忙碌时返回 409；请求中显式传入 `queue_if_busy: true` 则登记排队（上限由 `HARNESS_MAX_QUEUED_TASKS` 配置），Worker 完成后按 FIFO 启动下一任务，而不是偷启新容器。
 - 控制器重启会把已启动或可能已启动（`starting/running/cancelling`）的任务标为 `interrupted`，绝不自动重放。显式排队、尚未启动的任务保留为 `queued`；若重启时发现旧任务可能仍在运行，队列进入**恢复阻断状态**，必须由操作者确认旧 Worker 已终止，再调用 `POST /v1/queue/resume`（`confirm_stale_workers_stopped: true`）恢复派发。没有此类可疑任务时，启动可自动继续尚未执行的队列。仅已 `completed` 的 Session 可明确续接。
 - Engine 是另一服务的常驻生命周期，开发回测调用其 API 并复用其计算能力；不为每次回测创建 Engine Docker。此仓库的 Engine Research Client / Gateway 仍处于接口与 Mock 验证阶段，不能视为实机联调完成。
