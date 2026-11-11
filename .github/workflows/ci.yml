@@ -25,23 +25,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build independent image
-        run: docker build --tag seealpha-harness:mvp .
+      - name: Build resident Harness image
+        run: |
+          printf '%s\n' 'HARNESS_API_TOKEN=ci-only-example-token-12345678901234567890' > .env
+          mkdir -p .local
+          sudo install -d -m 700 -o 10001 -g 10001 .local/state
+          docker compose build harness
       - name: Build separate trusted gateway image (no model SDK)
         run: docker build -f docker/gateway.Dockerfile --tag seealpha-gateway:mvp .
       - name: Build optional trusted MCP Bridge service image (not launched per task)
         run: docker build -f docker/mcp-bridge.Dockerfile --tag seealpha-mcp-bridge:mvp .
-      - name: Smoke test HTTP health (no model request)
+      - name: Smoke test Compose health and SDK startup (no model request)
         run: |
-          docker run -d --name harness-smoke -p 127.0.0.1:18777:8777 \
-            -e HARNESS_API_TOKEN=ci-only-example-token-12345678901234567890 \
-            seealpha-harness:mvp
-          trap 'docker logs harness-smoke; docker rm -f harness-smoke' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18777/health > /tmp/harness-health.json; then
-              grep -q 'seealpha-harness' /tmp/harness-health.json
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
+          trap 'docker compose logs harness; docker compose down' EXIT
+          docker compose up -d --wait --wait-timeout 120 harness
+          curl -fsS http://127.0.0.1:8777/health | grep -q 'seealpha-harness'
+          docker compose exec -T harness python - <<'PY'
+          from deepseek_harness import DeepSeekHarness
+
+          with DeepSeekHarness(
+              dsh_home="/state/sdk-smoke",
+              cwd="/state",
+              provider="deepseek-official",
+              model="deepseek-v4-flash",
+              profile="sdk-minimal",
+          ):
+              pass
+          PY

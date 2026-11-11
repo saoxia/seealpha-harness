@@ -7,13 +7,15 @@ services:
     env_file: .env
     environment:
       HARNESS_STATE_DIR: /state
+      TMPDIR: /run/harness-sdk
     ports:
       - "127.0.0.1:8777:8777"
     volumes:
       - ./.local/state:/state
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=512m
+      - /tmp:rw,noexec,nosuid,nodev,size=512m
+      - /run/harness-sdk:rw,exec,nosuid,nodev,size=256m,uid=10001,gid=10001,mode=0700
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true

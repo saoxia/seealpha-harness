@@ -46,7 +46,7 @@ class TaskManager:
     def _environment(self) -> dict:
         # Do not pass Platform/Engine credentials or the HTTP control token.
         allowed = (
-            "PATH", "HOME", "LANG", "LC_ALL", "XDG_CACHE_HOME", "XDG_CONFIG_HOME",
+            "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME",
             "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DSH_SYSTEM_PROMPT",
             "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",
         )
