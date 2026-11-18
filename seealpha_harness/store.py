@@ -103,7 +103,8 @@ class TaskStore:
                 task = self.get(path.stem)
             except (ValueError, KeyError, json.JSONDecodeError, OSError):
                 continue
-            if task.get("id") != path.stem or not isinstance(task.get("created_at"), str):
+            if (not isinstance(task, dict) or task.get("id") != path.stem
+                    or not isinstance(task.get("created_at"), str)):
                 continue
             tasks.append({
                 key: task.get(key)
