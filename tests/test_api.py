@@ -47,3 +47,40 @@ def test_bad_id_and_extra_input(tmp_path):
         assert client.post("/v1/tasks", headers=HEADERS, json={
             "prompt": "a", "command": "rm -rf /",
         }).status_code == 422
+
+
+def test_history_and_timeline_are_authenticated_bounded_and_prompt_free(tmp_path):
+    app = build_app(Settings(token="x" * 40, state_dir=tmp_path))
+    with TestClient(app) as client:
+        manager = app.state.manager
+        manager._launch = lambda task: manager.store.change(task["id"], status="completed")
+        first = client.post(
+            "/v1/tasks", headers=HEADERS, json={"prompt": "sensitive research prompt"},
+        ).json()
+        second = client.post(
+            "/v1/tasks", headers=HEADERS, json={"prompt": "different private strategy"},
+        ).json()
+        tasks_url = "/v1/tasks?limit=1"
+        assert client.get(tasks_url).status_code == 401
+        latest = client.get(tasks_url, headers=HEADERS)
+        assert latest.status_code == 200
+        listed = latest.json()["tasks"]
+        assert len(listed) == 1 and listed[0]["id"] == second["id"]
+        assert "prompt" not in listed[0] and "final_response" not in listed[0]
+        assert "private" not in latest.text
+        assert client.get("/v1/tasks?limit=101", headers=HEADERS).status_code == 422
+
+        timeline = client.get(
+            f"/v1/tasks/{first['id']}/timeline?after=0", headers=HEADERS,
+        )
+        assert timeline.status_code == 200
+        events = timeline.json()["events"]
+        assert events and events[0]["type"] == "progress"
+        assert timeline.json()["next_cursor"] == events[-1]["sequence"]
+        after = client.get(
+            f"/v1/tasks/{first['id']}/timeline?after={events[-1]['sequence']}",
+            headers=HEADERS,
+        )
+        assert after.json()["events"] == []
+        assert client.get(f"/v1/tasks/{first['id']}/timeline").status_code == 401
+        assert client.get("/v1/tasks/invalid/timeline", headers=HEADERS).status_code == 404
