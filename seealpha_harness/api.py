@@ -84,6 +84,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         except QueueFullError as exc:
             raise HTTPException(429, str(exc)) from exc
 
+    @app.get("/v1/tasks")
+    def recent_tasks(
+        limit: int = Query(default=50, ge=1, le=100),
+        manager: TaskManager = Depends(protected),
+    ):
+        with manager.lock:
+            return {"tasks": manager.store.recent_tasks(limit=limit)}
+
     @app.get("/v1/queue")
     def queue_status(manager: TaskManager = Depends(protected)):
         return manager.queue_state()
@@ -104,6 +112,19 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/tasks/{task_id}")
     def get_task(task_id: str, manager: TaskManager = Depends(protected)):
         return find_task(manager, task_id)
+
+    @app.get("/v1/tasks/{task_id}/timeline")
+    def task_timeline(
+        task_id: str, after: int = Query(default=0, ge=0),
+        manager: TaskManager = Depends(protected),
+    ):
+        find_task(manager, task_id)
+        events = manager.store.events_after(task_id, after)
+        return {
+            "events": events,
+            "next_cursor": events[-1]["sequence"] if events else after,
+            "has_more": len(events) == 200,
+        }
 
     @app.post("/v1/tasks/{task_id}/continue", status_code=202)
     def continue_task(task_id: str, body: PromptBody, manager: TaskManager = Depends(protected)):
