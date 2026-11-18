@@ -84,3 +84,13 @@ def test_history_and_timeline_are_authenticated_bounded_and_prompt_free(tmp_path
         assert after.json()["events"] == []
         assert client.get(f"/v1/tasks/{first['id']}/timeline").status_code == 401
         assert client.get("/v1/tasks/invalid/timeline", headers=HEADERS).status_code == 404
+
+
+
+def test_placeholder_model_key_is_not_reported_as_ready(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "replace-with-dev-only-credential")
+    app = build_app(Settings(token="x" * 40, state_dir=tmp_path))
+    with TestClient(app) as client:
+        status = client.get("/health")
+        assert status.status_code == 200
+        assert status.json()["runtime_configured"] is False
