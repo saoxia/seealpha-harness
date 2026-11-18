@@ -45,7 +45,9 @@ curl -sS -X POST "$BASE/v1/tasks" \
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
+| `GET` | `/v1/tasks?limit=50` | 最近 1–100 个历史 Session，只返回任务元数据，不暴露原始 Prompt |
 | `GET` | `/v1/tasks/{id}` | 状态、最新回答、错误码 |
+| `GET` | `/v1/tasks/{id}/timeline?after=N` | 每页最多 200 条可信进度事件和下一游标；适合 Platform 轮询 |
 | `GET` | `/v1/queue` | 活动任务与等待任务 ID、容量、恢复阻断状态（不含 Prompt） |
 | `POST` | `/v1/queue/resume` | 控制器意外重启后，人工确认旧 Worker 已停止再恢复派发 |
 | `GET` | `/v1/tasks/{id}/events?after=0` | SSE 进度、终态和游标恢复 |
@@ -56,7 +58,7 @@ curl -sS -X POST "$BASE/v1/tasks" \
 
 | `GET` | `/v1/tasks/{id}/artifacts/summary-1` | 第一轮结果文件 |
 
-SDK 保存 Session 在独立 `homes/{id}`，工作区在 `workspaces/{id}`。任务调度遵守**不重播已启动代码**：`starting/running/cancelling` 在服务重启后标为 `interrupted`。明确排队且从未启动的任务可保留并恢复；若可能存在遗留 Worker，队列暂停，直到操作者确认旧进程已终止并恢复。已完成 Session 才可续接。参见 [常驻运行模式](docs/RESIDENT_RUNTIME.md)。
+SDK 保存 Session 在独立 `homes/{id}`，工作区在 `workspaces/{id}`。 查看历史和进度不启动新的 Agent Worker；原始提示仍存于 Harness 私有任务目录，但历史列表绝不返回提示。`/health.runtime_configured` 会拒绝 `.env.example` 的占位 DeepSeek Key，避免前端误报可用。任务调度遵守**不重播已启动代码**：`starting/running/cancelling` 在服务重启后标为 `interrupted`。明确排队且从未启动的任务可保留并恢复；若可能存在遗留 Worker，队列暂停，直到操作者确认旧进程已终止并恢复。已完成 Session 才可续接。参见 [常驻运行模式](docs/RESIDENT_RUNTIME.md)。
 
 模型活动通知仅输出**计数型进度**，不转发原始 SDK 事件、Shell 参数、密钥或工具输出。每轮最终 Markdown 回答继续自动保存为 `summary-N`。其他文件**不会自动发布**：研究代码/表格/JSON/PNG/Parquet 等必须放在任务工作区 `exports/`，待任务成功完成后，由持有 Harness API 令牌的调用方通过 `POST /v1/tasks/{id}/artifacts/import` 显式登记，例如 `{"source_file":"exports/report.csv"}`。文件被复制到私有成果目录、附带 SHA-256/来源/未审查状态，最大 16 MiB；拒绝软链接、硬链接、越界路径、HTML/JS 和特殊文件。下载强制附件；**这不是策略发布审批，也不构成恶意同 UID Agent 的安全隔离**。详见 [Artifact v1](docs/ARTIFACTS.md)。
 
