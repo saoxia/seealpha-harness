@@ -87,6 +87,37 @@ class TaskStore:
         atomic_json(self.path(task_id), task)
         return task
 
+    def recent_tasks(self, *, limit: int = 50) -> list[dict]:
+        """Bounded recent task metadata, never expose persisted prompts.
+
+        The current local Harness has only one trusted owner. Tenant isolation
+        belongs to SeeAlpha Platform, not this file journal.
+        """
+        if not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("Invalid history limit")
+        tasks = []
+        for path in (self.root / "jobs").glob("*.json"):
+            if path.is_symlink() or not path.is_file():
+                continue
+            try:
+                task = self.get(path.stem)
+            except (ValueError, KeyError, json.JSONDecodeError, OSError):
+                continue
+            if (not isinstance(task, dict) or task.get("id") != path.stem
+                    or not isinstance(task.get("created_at"), str)):
+                continue
+            tasks.append({
+                key: task.get(key)
+                for key in ("id", "status", "turn", "created_at", "updated_at",
+                            "final_response", "error")
+            })
+        tasks.sort(key=lambda item: (item["created_at"], item["id"]), reverse=True)
+        # The list is for navigation only; do not transfer large AI answers for
+        # every historical session.
+        for task in tasks[:limit]:
+            task.pop("final_response", None)
+        return tasks[:limit]
+
     def pending_queue(self) -> list[dict]:
         """Explicitly opted-in unstarted tasks, sorted for FIFO dispatch."""
         pending = []
