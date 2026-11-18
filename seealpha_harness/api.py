@@ -69,7 +69,8 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     def health():
         return {
             "service": "seealpha-harness", "contract_version": 1,
-            "runtime_configured": bool(os.environ.get("DEEPSEEK_API_KEY")),
+            "runtime_configured": bool((os.environ.get("DEEPSEEK_API_KEY") or "").strip())
+            and not (os.environ.get("DEEPSEEK_API_KEY") or "").startswith("replace-"),
             "mode": "single-user-development",
             "runtime_layout": "resident-container",
             "task_execution": "subprocess",
