@@ -6,12 +6,15 @@ development Agent Shell; capability exposure is bounded to its own task.
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import hashlib
 import json
 import os
 import re
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -23,6 +26,7 @@ _MAX_SNAPSHOT = 16 * 1_048_576
 _COMMANDS = {
     "datasets", "snapshot_create", "snapshot_get", "snapshot_fetch",
     "backtest_submit", "backtest_get", "backtest_cancel",
+    "candidate_create", "candidate_get", "candidate_submit",
 }
 
 
@@ -74,7 +78,8 @@ class PlatformResearchClient:
         if operation not in _COMMANDS or not isinstance(arguments, dict):
             raise ValueError("Unknown Platform research command")
         path = f"/api/research/tasks/{self.task_id}/commands/{operation}"
-        if len(json.dumps(arguments, allow_nan=False).encode()) > 16_384:
+        limit = 96_000 if operation == "candidate_create" else 16_384
+        if len(json.dumps(arguments, allow_nan=False).encode()) > limit:
             raise ValueError("Research arguments too large")
         try:
             with self.client.stream("POST", path, json={"arguments": arguments}) as response:
@@ -154,6 +159,49 @@ class PlatformResearchClient:
             "quote_currency": quote_currency, "idempotency_key": idempotency_key,
         })
 
+    def register_candidate(self, path: Path, *, name="ai_candidate", title="AI Candidate",
+                           version="1"):
+        """Package a restricted Python literal (not executable user code)."""
+        source = Path(path).read_bytes()
+        if not 1 <= len(source) <= 32_768:
+            raise ValueError("Candidate source exceeds 32 KiB")
+        if (not re.fullmatch(r"[a-z][a-z0-9_]{1,40}", name)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}", version)
+                or not 1 <= len(title) <= 100):
+            raise ValueError("Invalid candidate metadata")
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as z:
+            metadata = json.dumps({
+                "format": 1, "name": name, "title": title, "version": version,
+                "entry_point": "strategy:CANDIDATE",
+            }, sort_keys=True).encode("utf-8")
+            for filename, content in (
+                ("seealpha-package.json", metadata),
+                ("strategy.py", source),
+            ):
+                info = zipfile.ZipInfo(filename, date_time=(2026, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o600 << 16
+                z.writestr(info, content)
+        data = archive.getvalue()
+        if len(data) > 65_536:
+            raise ValueError("Candidate archive exceeds 64 KiB")
+        return self._request("candidate_create", {
+            "archive": base64.b64encode(data).decode("ascii"),
+        })
+
+    def get_candidate(self, candidate_id: str):
+        return self._request("candidate_get", {"candidate_id": candidate_id})
+
+    def submit_candidate(self, *, candidate_id: str, start: str, end: str,
+                         starting_balance: str, quote_currency: str,
+                         idempotency_key: str):
+        return self._request("candidate_submit", {
+            "candidate_id": candidate_id, "start": start, "end": end,
+            "starting_balance": starting_balance,
+            "quote_currency": quote_currency, "idempotency_key": idempotency_key,
+        })
+
     def get_backtest(self, backtest_id: str):
         return self._request("backtest_get", {"backtest_id": backtest_id})
 
@@ -173,8 +221,21 @@ def main(argv=None):
             cmd.add_argument("--starting-balance", required=True)
             cmd.add_argument("--quote-currency", required=True)
             cmd.add_argument("--idempotency-key", required=True)
-    for name in ("snapshot-get", "snapshot-fetch", "backtest-get", "backtest-cancel"):
+    for name in ("snapshot-get", "snapshot-fetch", "backtest-get", "backtest-cancel",
+                 "candidate-get"):
         commands.add_parser(name).add_argument("--id", required=True)
+    candidate = commands.add_parser("candidate-create")
+    candidate.add_argument("--file", required=True)
+    candidate.add_argument("--name", default="ai_candidate")
+    candidate.add_argument("--version", default="1")
+    candidate.add_argument("--title", default="AI Candidate")
+    submit = commands.add_parser("candidate-submit")
+    submit.add_argument("--id", required=True)
+    submit.add_argument("--start", required=True)
+    submit.add_argument("--end", required=True)
+    submit.add_argument("--starting-balance", required=True)
+    submit.add_argument("--quote-currency", required=True)
+    submit.add_argument("--idempotency-key", required=True)
     args = parser.parse_args(argv)
     try:
         with PlatformResearchClient.from_environment() as client:
@@ -197,8 +258,24 @@ def main(argv=None):
                 )
             elif args.command == "backtest-get":
                 result = client.get_backtest(args.id)
-            else:
+            elif args.command == "backtest-cancel":
                 result = client.cancel_backtest(args.id)
+            elif args.command == "candidate-create":
+                result = client.register_candidate(
+                    Path(args.file), name=args.name, title=args.title,
+                    version=args.version,
+                )
+            elif args.command == "candidate-get":
+                result = client.get_candidate(args.id)
+            elif args.command == "candidate-submit":
+                result = client.submit_candidate(
+                    candidate_id=args.id, start=args.start, end=args.end,
+                    starting_balance=args.starting_balance,
+                    quote_currency=args.quote_currency,
+                    idempotency_key=args.idempotency_key,
+                )
+            else:
+                raise ValueError("Unsupported research command")
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
         return 0
     except (ResearchCommandError, ValueError, FileExistsError, OSError) as error:
