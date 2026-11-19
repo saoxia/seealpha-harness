@@ -8,7 +8,7 @@
 - **seealpha-harness（本仓库）**：Agent Runtime、会话、工具与 Skills、可编程研究沙箱、策略草稿、分析结果及可视化成果生成。
 - **seealpha-engine（`saoxia/seealpha-engine`）**：交易行情及 Catalog、研究/回测计算、风控、订单和执行事实。
 - 各服务**独立仓库、独立依赖、独立构建与部署**；通过可版本化服务/数据契约通信。禁止通过跨仓库 Python 源码导入、共享业务数据库或复制 Engine 算法来规避接口。
-- Harness **可以在授权后直接与 Engine 的研究接口通信**，不要求所有大数据由 Platform 中转；Platform 负责授权与审计，Engine 自身必须验证权限。
+- **2026-11-19 选定的默认 AI 研究调用链**：Harness → Platform 轻量研究代理 → Engine Research API。Harness 不直接获取 Engine Grant 或管理凭据；Platform 负责授权、代理和审计，Engine 自身仍需验证权限。独立 Gateway/MCP 仅为非必需实验实现。
 - 用户使用的正式 AI Workspace 属于 SeeAlpha Web；本仓库定义流式事件、研究成果与必要的独立可视化内容，不维护第二套产品登录/租户体系。独立调试 UI 不等于正式产品前端。
 
 ## 研究自由度与安全边界
