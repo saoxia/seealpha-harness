@@ -188,3 +188,84 @@ def test_candidate_cli_package_and_submit_are_fixed_and_checksum_bound(tmp_path)
     ) as client:
         with pytest.raises(ValueError):
             client.register_candidate(source, name="../../evil")
+
+
+def test_python_candidate_directory_routes_to_platform_without_docker_or_paths(tmp_path):
+    import base64
+    import io
+    import json
+    import zipfile
+
+    folder = tmp_path / "strategy-package"
+    folder.mkdir()
+    (folder / "seealpha-package.json").write_text(json.dumps({
+        "format": 1, "name": "ai_signal", "title": "AI Strategy",
+        "version": "1", "entry_point": "strategy:AiSignal",
+        "parameters": {
+            "symbol": "ETHUSDT", "allocation": "1", "risk_limit": "1",
+        },
+    }))
+    (folder / "strategy.py").write_text(
+        "from nautilus_trader.trading import Strategy\n"
+        "class AiSignal(Strategy):\n"
+        "    def on_bar(self, bar): pass\n"
+    )
+    identity = str(uuid4())
+    digests = []
+    def handler(request):
+        assert request.url.host == "platform.local"
+        assert request.headers["Authorization"] == "Bearer " + TOKEN
+        params = json.loads(request.content)["arguments"]
+        assert str(folder) not in json.dumps(params)
+        if request.url.path.endswith("/python_candidate_create"):
+            raw = base64.b64decode(params["archive"], validate=True)
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                assert z.namelist() == ["seealpha-package.json", "strategy.py"]
+                assert b"class AiSignal" in z.read("strategy.py")
+            digest = hashlib.sha256(raw).hexdigest()
+            digests.append(digest)
+            return httpx.Response(200, json={
+                "candidate_id": "a" * 32, "package_hash": digest,
+            })
+        assert request.url.path.endswith("/python_candidate_submit")
+        assert params == {
+            "candidate_id": "a" * 32,
+            "start": "2026-01-01", "end": "2026-01-02",
+            "starting_balance": "1000", "quote_currency": "USDT",
+            "idempotency_key": "ai-v1",
+        }
+        return httpx.Response(202, json={"backtest_id": "job-1", "status": "queued"})
+    with PlatformResearchClient(
+        "https://platform.local", TOKEN, identity,
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        first = client.register_python_candidate(folder)
+        second = client.register_python_candidate(folder)
+        assert first["package_hash"] == second["package_hash"]
+        response = client.submit_python_candidate(
+            candidate_id=first["candidate_id"], start="2026-01-01",
+            end="2026-01-02", starting_balance="1000",
+            quote_currency="USDT", idempotency_key="ai-v1",
+        )
+        assert response["backtest_id"] == "job-1"
+    assert digests[0] == digests[1]
+
+
+def test_python_candidate_rejects_symlink_and_large_files(tmp_path):
+    path = tmp_path / "strategy"
+    path.mkdir()
+    (path / "seealpha-package.json").write_text("{}")
+    (path / "strategy.py").write_text("class Alpha: pass")
+    (path / "shortcut.py").symlink_to(path / "strategy.py")
+    with PlatformResearchClient(
+        "https://platform.local", TOKEN, str(uuid4()),
+        transport=httpx.MockTransport(
+            lambda _: (_ for _ in ()).throw(AssertionError("Should not send")),
+        ),
+    ) as client:
+        with pytest.raises(ValueError):
+            client.register_python_candidate(path)
+        (path / "shortcut.py").unlink()
+        (path / "strategy.py").write_text("x" * (256 * 1024 + 1))
+        with pytest.raises(ValueError):
+            client.register_python_candidate(path)

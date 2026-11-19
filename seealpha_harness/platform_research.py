@@ -27,6 +27,7 @@ _COMMANDS = {
     "datasets", "snapshot_create", "snapshot_get", "snapshot_fetch",
     "backtest_submit", "backtest_get", "backtest_cancel",
     "candidate_create", "candidate_get", "candidate_submit",
+    "python_candidate_create", "python_candidate_submit",
 }
 
 
@@ -78,7 +79,8 @@ class PlatformResearchClient:
         if operation not in _COMMANDS or not isinstance(arguments, dict):
             raise ValueError("Unknown Platform research command")
         path = f"/api/research/tasks/{self.task_id}/commands/{operation}"
-        limit = 96_000 if operation == "candidate_create" else 16_384
+        limit = (405_000 if operation == "python_candidate_create" else
+                 96_000 if operation == "candidate_create" else 16_384)
         if len(json.dumps(arguments, allow_nan=False).encode()) > limit:
             raise ValueError("Research arguments too large")
         try:
@@ -190,6 +192,59 @@ class PlatformResearchClient:
             "archive": base64.b64encode(data).decode("ascii"),
         })
 
+    def register_python_candidate(self, package: Path):
+        """Send AI-authored Python without sharing Harness paths with Engine."""
+        package = Path(package)
+        if package.is_symlink():
+            raise ValueError("Candidate root cannot be a symlink")
+        if package.is_file() and package.suffix.lower() == ".zip":
+            if package.stat().st_size > 256 * 1024:
+                raise ValueError("Python candidate ZIP exceeds 256 KiB")
+            data = package.read_bytes()
+        elif package.is_dir():
+            paths = sorted(package.rglob("*"))
+            if (
+                len(paths) > 40
+                or any(item.is_symlink() for item in paths)
+                or len([item for item in paths if item.is_file()]) > 32
+            ):
+                raise ValueError("Python candidate directory is invalid")
+            files = [item for item in paths if item.is_file()]
+            if sum(item.stat().st_size for item in files) > 256 * 1024:
+                raise ValueError("Python candidate source files exceed 256 KiB")
+            archive = io.BytesIO()
+            with zipfile.ZipFile(archive, "w") as zipped:
+                for item in paths:
+                    if not item.is_file():
+                        continue
+                    rel = item.relative_to(package).as_posix()
+                    if (not rel or rel.startswith("/") or ".." in rel.split("/")
+                            or "strategy_python" in rel
+                            or Path(rel).suffix.lower() not in {".py", ".json", ".md", ".txt"}):
+                        raise ValueError("Unsupported Python candidate file")
+                    payload = item.read_bytes()
+                    info = zipfile.ZipInfo(rel, date_time=(2026, 1, 1, 0, 0, 0))
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    info.external_attr = 0o600 << 16
+                    zipped.writestr(info, payload)
+            data = archive.getvalue()
+        else:
+            raise ValueError("Candidate must be a package directory or ZIP")
+        if not 1 <= len(data) <= 256 * 1024:
+            raise ValueError("Python candidate ZIP exceeds 256 KiB")
+        return self._request("python_candidate_create", {
+            "archive": base64.b64encode(data).decode("ascii"),
+        })
+
+    def submit_python_candidate(self, *, candidate_id: str, start: str, end: str,
+                                starting_balance: str, quote_currency: str,
+                                idempotency_key: str):
+        return self._request("python_candidate_submit", {
+            "candidate_id": candidate_id, "start": start, "end": end,
+            "starting_balance": starting_balance,
+            "quote_currency": quote_currency, "idempotency_key": idempotency_key,
+        })
+
     def get_candidate(self, candidate_id: str):
         return self._request("candidate_get", {"candidate_id": candidate_id})
 
@@ -229,6 +284,15 @@ def main(argv=None):
     candidate.add_argument("--name", default="ai_candidate")
     candidate.add_argument("--version", default="1")
     candidate.add_argument("--title", default="AI Candidate")
+    python = commands.add_parser("python-candidate-create")
+    python.add_argument("--package", required=True)
+    python_submit = commands.add_parser("python-candidate-submit")
+    python_submit.add_argument("--id", required=True)
+    python_submit.add_argument("--start", required=True)
+    python_submit.add_argument("--end", required=True)
+    python_submit.add_argument("--starting-balance", required=True)
+    python_submit.add_argument("--quote-currency", required=True)
+    python_submit.add_argument("--idempotency-key", required=True)
     submit = commands.add_parser("candidate-submit")
     submit.add_argument("--id", required=True)
     submit.add_argument("--start", required=True)
@@ -264,6 +328,15 @@ def main(argv=None):
                 result = client.register_candidate(
                     Path(args.file), name=args.name, title=args.title,
                     version=args.version,
+                )
+            elif args.command == "python-candidate-create":
+                result = client.register_python_candidate(Path(args.package))
+            elif args.command == "python-candidate-submit":
+                result = client.submit_python_candidate(
+                    candidate_id=args.id, start=args.start, end=args.end,
+                    starting_balance=args.starting_balance,
+                    quote_currency=args.quote_currency,
+                    idempotency_key=args.idempotency_key,
                 )
             elif args.command == "candidate-get":
                 result = client.get_candidate(args.id)
