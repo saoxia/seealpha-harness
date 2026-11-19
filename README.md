@@ -114,3 +114,9 @@ python -m compileall -q seealpha_harness
 4. SeeAlpha Web 通过 Platform API 接收 Harness 事件与 Artifact，完成完整策略研发闭环。
 
 上游 SDK 参考：[DeepSeek Harness Python SDK](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md)。
+
+## License and community / 许可证与社区
+
+本仓库的项目自有核心代码拟采用 [Apache License 2.0](LICENSE)，允许按许可证免费使用、修改、分发和商业经营；官方托管、私有策略及其他服务另行约定。研究工作区、用户策略、模型凭据及研究成果不会因为运行在 Harness 上而自动开源。
+
+详见 [贡献指南](CONTRIBUTING.md)、[CLA 草案（尚未生效）](CLA.md)、[自愿商业登记](COMMERCIAL_USE.md)、[品牌政策](TRADEMARKS.md)、[漏洞报告](SECURITY.md) 和 [第三方许可说明](THIRD_PARTY_NOTICES.md)。商业登记完全自愿。
