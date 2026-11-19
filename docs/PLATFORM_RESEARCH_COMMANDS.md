@@ -21,6 +21,21 @@ CLI 只调用 Platform `/api/research/tasks/{task_id}/commands/...`，不持有 
 **安全限制**：任务级 Platform Capability 在自由 Shell 同 UID 的 Worker 环境可读取，因而这只是受限开发研究能力，不是对恶意 Agent 的强隔离。Platform 对任务、租户、资源、每次调用预算、状态和用途进行后端校验；Engine 仍独立 HMAC 验证。严禁注入生产账户/交易密钥、Engine 管理令牌，或通过 CLI 开放任意 HTTP/Shell 远程执行。
 
 
+## 完整 AI Python Strategy（需要后端显式启用）
+
+不再局限于 `CANDIDATE` 规则字典。AI 可以参考 SeeAlpha 的 `demo_ema_crossover`，在研究工作目录下写普通 NautilusTrader `Strategy` 子类，配套 `seealpha-package.json`（含 `format/name/version/title/entry_point/parameters`），参数至少提供 `symbol`、`allocation`、`risk_limit`。不需要在 Harness 或 Engine 中为每个新策略添加硬编码类型。
+
+```bash
+python -m seealpha_harness.platform_research python-candidate-create --package ./my-strategy
+python -m seealpha_harness.platform_research candidate-get --id CANDIDATE_ID
+python -m seealpha_harness.platform_research python-candidate-submit --id CANDIDATE_ID --start 2026-01-01 --end 2026-01-02 --starting-balance 1000 --quote-currency USDT --idempotency-key v1
+python -m seealpha_harness.platform_research backtest-get --id BACKTEST_ID
+```
+
+`--package` 可接受策略目录或已打包的 ZIP 文件。Harness 仅上传 ZIP 字节和任务级研究令牌，不向 Engine 共享本地文件路径、容器地址或 Engine Token。Platform 根据用户真实开发租户、历史数据订阅和账户选择 Engine Docker；Engine 只负责静态检验、在**已有开发 Engine Docker 内的 Backtest Worker** 加载 Python 并运行 NautilusTrader。
+
+该能力需要 Platform `RESEARCH_PYTHON_ENABLED=true`、对应开发 Engine `ENGINE_RESEARCH_PYTHON_ENABLED=true` 且有效研究授权，生产路径不能启用。容器隔离并非同 UID Worker 与 Engine 主进程之间的完全隔离，此功能仅面向可信开发用户，不适合直接开放任意不可信 Python 代码。AI 应检查实际完成结果，失败不能声称成功，也不自动下发到生产环境。
+
 ## AI 候选版本（受限代码，不执行任意 Python）
 
 创建文件 `candidate.py`，内容必须**只有** `CANDIDATE = {...}` 一条 Python 字面量赋值。示例：
