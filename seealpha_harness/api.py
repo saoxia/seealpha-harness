@@ -174,7 +174,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
                     body.research_access.validated() if body.research_access else None
                 ),
             )
-        except (BusyError, ConflictError) as exc:
+        except (BusyError, ConflictError, ValueError) as exc:
             raise HTTPException(409, str(exc)) from exc
         except QueueFullError as exc:
             raise HTTPException(429, str(exc)) from exc
