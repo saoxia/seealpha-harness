@@ -1,12 +1,14 @@
-# Harness 的 Platform 研究命令客户端（默认关闭）
+# Harness 的任务级 Platform MCP 客户端（默认关闭）
 
-SeeAlpha 的选定路径是 **Agent（常驻 Harness）→ Platform 任务级研究代理 → Engine Research API**。不会运行独立 Gateway/MCP Bridge，也不会在 Engine 主机执行 AI 的任意 Shell。
+SeeAlpha 的选定路径是 **Agent MCP Client（常驻 Harness）→ Platform 任务级 MCP 代理 → Engine 原生 MCP**。不会运行独立 Gateway/MCP Bridge，也不会在 Engine 主机执行 AI 的任意 Shell。
 
 ## 使用方式
 
 当且仅当可信 Platform 在 `POST /v1/tasks` 请求中提供合法的预绑定 `task_id` 和 `research_access` 时，TaskManager 保存只限当前任务的短期 Platform Capability，并把 `SEEALPHA_PLATFORM_RESEARCH_ORIGIN`、`SEEALPHA_PLATFORM_RESEARCH_TOKEN`、`SEEALPHA_PLATFORM_RESEARCH_TASK_ID` 传给相应的 Worker 进程，不向公共任务响应、历史列表或 SDK Prompt 输出令牌。普通任务行为不变。
 
-AI 可以通过 Shell 执行 `python -m seealpha_harness.platform_research` 的固定子命令：
+已获任务权限时，Worker 动态生成 SDK 的 `@deepseek-ai/dsh-mcp-client` 配置文件，使用环境中的 Platform 任务能力作为 HTTP Authorization Bearer，连接 `POST /api/research/tasks/{task_id}/mcp`。Agent 可以直接发现并调用 `list_datasets`、`create_snapshot`、`get_snapshot`、`submit_backtest`、`get_backtest`、`cancel_backtest`、`submit_candidate_backtest`，并在额外开启可信 Python 开发回测时使用 `submit_python_candidate_backtest`。
+
+仅候选打包登记和 Parquet 二进制下载仍需 Shell 执行 `python -m seealpha_harness.platform_research`。原固定 CLI 子命令保持兼容：
 
 - `datasets`
 - `snapshot-create --start ... --end ...`
@@ -62,4 +64,8 @@ python -m seealpha_harness.platform_research backtest-get --id BACKTEST_ID
 
 `candidate-create` 自动封装包含 `strategy.py` 和 `seealpha-package.json` 的受限 ZIP；Platform 持久化原始包及 SHA-256，Engine 再静态验证，使用自身可信策略类回测。失败与未完成不可描述为回测成功。每次修改建立新候选版本，不覆盖历史。**这只是 AI 策略规则/参数实验闭环的第一阶段，不是任意生成 Python 的安全沙箱。**
 
-配置与 Engine 密钥/历史数据要求见 [SeeAlpha Platform 文档](https://github.com/saoxia/SeeAlpha/blob/main/docs/AI_RESEARCH_COMMANDS.md)。AI 生成任意 Python 策略类仍不能直接执行，后续要先建立强隔离执行环境。
+配置与 Engine 原生 MCP 开关、密钥/历史数据要求见 [SeeAlpha Platform 文档](https://github.com/saoxia/SeeAlpha/blob/main/docs/AI_RESEARCH_COMMANDS.md)。AI 生成任意 Python 策略类仍不能直接执行，后续要先建立强隔离执行环境。
+
+## MCP 任务模式验证说明
+
+Platform 每次 MCP 调用重新验证 Task、Turn、租户/账户/数据集授权、调用预算、撤销状态；Engine 每次使用操作级短期 Grant 验证。MCP JSON 只承载固定操作及元数据，不处理 Parquet 二进制、任意 URL、Shell 或订单。Agent 不获得 Engine 管理令牌、Engine Grant 或签名密钥。MCP 不可用时不自动回退旧 REST；生产部署前必须在隔离开发主机验证 DeepSeek SDK 与三个服务的真实协议协商、候选策略回测和取消/恢复。

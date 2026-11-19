@@ -2,7 +2,7 @@
 
 SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究、开发回测、结果分析与可视化。它不是交易执行服务，也不维护 SeeAlpha 的用户/租户体系或正式产品 Web。
 
-> **选定架构（2026-11-19）**：AI Harness → SeeAlpha Platform 轻量研究代理 → Engine Research API，不再依赖独立 Gateway/MCP Bridge。Platform 已提交直接研究客户端（尚未连接 Agent 的真实任务 API），此仓库不因架构选定自动获得 Engine 回测能力。详见 [Platform 简化方案](https://github.com/saoxia/SeeAlpha/blob/main/docs/DIRECT_AI_RESEARCH.md)。\n\n> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与**本地 Research Artifact v1 草稿**已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
+> **MCP 研究链路（2026-11-20）**：已绑定的 Harness 研究任务通过 SDK MCP 客户端 → Platform 任务级 MCP 代理 → 独立 Engine 原生 MCP；不依赖独立 Gateway/MCP Bridge，不向 Agent 暴露 Engine Grant。仅为显式启用的可信开发租户提供，仍需真实模型/容器端到端验收。详见 [Platform 简化方案](https://github.com/saoxia/SeeAlpha/blob/main/docs/DIRECT_AI_RESEARCH.md)。\n\n> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与**本地 Research Artifact v1 草稿**已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
 
 ## 项目边界
 
@@ -78,7 +78,7 @@ python -m compileall -q seealpha_harness
 
 新增 `seealpha_harness/research_client.py` 与 `research_tools.py`：发现可用数据、创建/校验只读 Parquet 快照、提交开发模拟回测、读取状态和取消。协议使用 `X-SeeAlpha-Engine-Contract-Version: 2` 与独立研究合同版本 `1`；仅允许固定研究路径，不转发任意 HTTP 或实盘指令。`tests/test_research_client.py` 使用假 Engine，检查版本、拒绝、数据完整性、错误脱敏和访问范围。
 
-**重要**：独立 Engine 已有默认关闭的 Research HTTP v1 路由；但这些工具尚未接入官方 Agent SDK，也没有 Platform 授权签发及隔离的凭据代理。不能把 Engine 研究令牌注入现有不可信 Shell。详细接口与缺口见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)。本阶段不进行实机部署或真实模型调用。
+**当前**：已通过 Platform 的任务能力与 MCP 代理将开发研究工具注册到 SDK；原 `EngineResearchClient` 仍为不用于 Agent 的旧 HTTP 参考组件。禁止给 Agent Engine Grant 或管理令牌。详细接口与缺口见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)。本阶段不进行实机部署或真实模型调用。
 
 ## 历史实验组件：Trusted Research Gateway（不再是默认链路）
 
@@ -96,7 +96,7 @@ python -m compileall -q seealpha_harness
 
 新增 [任务级 MCP Bridge](docs/MCP_BRIDGE.md)：Gateway 为每个研究任务签发独立的桥接令牌，仅供独立 Sidecar 使用；Agent 不接触 Engine 或 Gateway 管理凭据，通过官方 DeepSeek Harness MCP 客户端发现七项研究工具，在自身隔离的 Python/Shell 环境里分析数据和开发策略。
 
-包含 MCP Python SDK 2 的工具服务、只读 Parquet 数据中转、不含密钥的 SDK profile patch、Agent 任务 ID 绑定及可选的独立服务构建材料。**现有单容器 Compose 与 TaskManager 默认均不会启用 MCP**。若今后启用受控研究工具，持有 Engine/Gateway 高权限凭据的服务必须部署在 Agent 不可读取其凭据的可信边界之外；**不能把 Bridge/Gateway 密钥和自由 Shell 放进同一容器来伪造隔离**。本阶段无实机或模型验收。
+包含 MCP Python SDK 2 的工具服务、只读 Parquet 数据中转、不含密钥的 SDK profile patch、Agent 任务 ID 绑定及可选的独立服务构建材料。**旧独立 MCP Bridge 仍未启用**；现有 Harness TaskManager 只在任务获 Platform 明确研究授权时动态加载新的 Platform MCP profile。若今后启用受控研究工具，持有 Engine/Gateway 高权限凭据的服务必须部署在 Agent 不可读取其凭据的可信边界之外；**不能把 Bridge/Gateway 密钥和自由 Shell 放进同一容器来伪造隔离**。本阶段无实机或模型验收。
 
 ## 常驻容器运行模式
 
