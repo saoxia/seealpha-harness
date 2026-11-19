@@ -170,12 +170,19 @@ class PlatformResearchClient:
                 or not 1 <= len(title) <= 100):
             raise ValueError("Invalid candidate metadata")
         archive = io.BytesIO()
-        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
-            z.writestr("seealpha-package.json", json.dumps({
+        with zipfile.ZipFile(archive, "w") as z:
+            metadata = json.dumps({
                 "format": 1, "name": name, "title": title, "version": version,
                 "entry_point": "strategy:CANDIDATE",
-            }, sort_keys=True))
-            z.writestr("strategy.py", source)
+            }, sort_keys=True).encode("utf-8")
+            for filename, content in (
+                ("seealpha-package.json", metadata),
+                ("strategy.py", source),
+            ):
+                info = zipfile.ZipInfo(filename, date_time=(2026, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o600 << 16
+                z.writestr(info, content)
         data = archive.getvalue()
         if len(data) > 65_536:
             raise ValueError("Candidate archive exceeds 64 KiB")

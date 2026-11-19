@@ -172,6 +172,8 @@ def test_candidate_cli_package_and_submit_are_fixed_and_checksum_bound(tmp_path)
     ) as client:
         created = client.register_candidate(source, version="2")
         assert created["package_hash"] == registered["sha256"]
+        again = client.register_candidate(source, version="2")
+        assert again["package_hash"] == created["package_hash"]
         result = client.submit_candidate(
             candidate_id=created["candidate_id"], start="2026-01-01",
             end="2026-01-02", starting_balance="1000",
@@ -179,7 +181,7 @@ def test_candidate_cli_package_and_submit_are_fixed_and_checksum_bound(tmp_path)
         )
         assert result["status"] == "queued"
         assert client.get_candidate(created["candidate_id"])["candidate_id"] == created["candidate_id"]
-    assert len(calls) == 3
+    assert len(calls) == 4
     with PlatformResearchClient(
         "https://platform.local", TOKEN, task_id,
         transport=httpx.MockTransport(handler),
