@@ -49,7 +49,24 @@ def execute(task_id: str, store: TaskStore, *, runtime_factory=None) -> int:
                 session = harness.resume_session(task_id)
             else:
                 session = harness.start_session(task_id)
-            result = session.run(task["prompt"], on_notification=on_notification)
+            prompt = task["prompt"]
+            if os.environ.get("SEEALPHA_PLATFORM_RESEARCH_TASK_ID") == task_id:
+                prompt = (
+                    "This task has authorized development research tools. Use Shell "
+                    "to run 'python -m seealpha_harness.platform_research datasets' "
+                    "to discover approved datasets. Other commands: "
+                    "snapshot-create --start YYYY-MM-DD --end YYYY-MM-DD; "
+                    "snapshot-get --id SNAPSHOT; snapshot-fetch --id SNAPSHOT; "
+                    "backtest-submit --start YYYY-MM-DD --end YYYY-MM-DD "
+                    "--starting-balance 1000 --quote-currency USDT "
+                    "--idempotency-key UNIQUE; backtest-get --id ID; "
+                    "backtest-cancel --id ID. Never print environment variables "
+                    "or tokens. All operations are simulation-only, and only "
+                    "pre-issued development strategies can be backtested. "
+                    "Do not claim generated code has been backtested.\\n\\n"
+                    + prompt
+                )
+            result = session.run(prompt, on_notification=on_notification)
         response = (result.final_response or "")[:100_000]
         finish_reason = result.finish_reason
         if finish_reason != "completed":

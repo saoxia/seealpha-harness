@@ -6,6 +6,8 @@ import hmac
 import json
 import os
 from typing import Literal
+from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
@@ -21,10 +23,27 @@ CONTRACT_VERSION = "1"
 CONTRACT_HEADER = "X-SeeAlpha-Harness-Contract-Version"
 
 
+class ResearchAccess(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    origin: str = Field(min_length=10, max_length=240)
+    token: str = Field(min_length=40, max_length=256, repr=False)
+    expires_at: int = Field(gt=0)
+
+    def validated(self) -> dict:
+        url = urlsplit(self.origin)
+        if (url.scheme not in {"http", "https"} or not url.hostname
+                or url.username or url.password or url.path not in {"", "/"}
+                or url.query or url.fragment):
+            raise ValueError("Invalid research Platform service origin")
+        return self.model_dump()
+
+
 class PromptBody(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     prompt: str = Field(min_length=1, max_length=20_000)
     queue_if_busy: bool = False
+    task_id: str | None = None
+    research_access: ResearchAccess | None = None
 
 
 class ImportArtifactBody(BaseModel):
@@ -79,11 +98,27 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/tasks", status_code=202)
     def create_task(body: PromptBody, manager: TaskManager = Depends(protected)):
         try:
-            return manager.create(body.prompt, queue_if_busy=body.queue_if_busy)
+            if body.task_id is not None:
+                try:
+                    if str(UUID(body.task_id, version=4)) != body.task_id:
+                        raise ValueError
+                except (TypeError, ValueError, AttributeError):
+                    raise HTTPException(422, "Invalid research task identity") from None
+            if body.research_access is not None and body.task_id is None:
+                raise HTTPException(422, "Research requires a prebound task identity")
+            return manager.create(
+                body.prompt, queue_if_busy=body.queue_if_busy,
+                task_id=body.task_id,
+                research_access=(
+                    body.research_access.validated() if body.research_access else None
+                ),
+            )
         except BusyError as exc:
             raise HTTPException(409, str(exc)) from exc
         except QueueFullError as exc:
             raise HTTPException(429, str(exc)) from exc
+        except (ValueError, ConflictError) as exc:
+            raise HTTPException(409, "Research task identity or state invalid") from exc
 
     @app.get("/v1/tasks")
     def recent_tasks(
@@ -130,9 +165,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/tasks/{task_id}/continue", status_code=202)
     def continue_task(task_id: str, body: PromptBody, manager: TaskManager = Depends(protected)):
         find_task(manager, task_id)
+        if body.task_id is not None:
+            raise HTTPException(422, "Continuation cannot replace task identity")
         try:
             return manager.continue_task(
                 task_id, body.prompt, queue_if_busy=body.queue_if_busy,
+                research_access=(
+                    body.research_access.validated() if body.research_access else None
+                ),
             )
         except (BusyError, ConflictError) as exc:
             raise HTTPException(409, str(exc)) from exc
