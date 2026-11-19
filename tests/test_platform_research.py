@@ -317,3 +317,46 @@ def test_basket_research_cli_client_is_task_scoped_and_never_supplies_live_conte
     assert [path.rsplit("/", 1)[-1] for path, _ in observed] == [
         "basket_run", "basket_latest",
     ]
+
+
+def test_basket_cli_dispatches_run_and_latest_without_account_selectors(monkeypatch, capsys):
+    from seealpha_harness import platform_research
+
+    received = []
+
+    class Stub:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def run_basket_backtest(self, **kwargs):
+            received.append(("run", kwargs))
+            return {"status": "completed", "mode": "native_dual_venue_development_only"}
+
+        def latest_basket_backtest(self, **kwargs):
+            received.append(("latest", kwargs))
+            return {"status": "completed", "mode": "native_dual_venue_development_only"}
+
+    monkeypatch.setattr(
+        platform_research.PlatformResearchClient, "from_environment",
+        classmethod(lambda _cls: Stub()),
+    )
+    assert platform_research.main([
+        "basket-run", "--mode", "funding_carry",
+        "--start", "2026-01-01", "--end", "2026-01-02",
+        "--interval", "1m", "--primary-balance", "200",
+        "--perpetual-balance", "300", "--max-gross-notional", "500",
+    ]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "completed"
+    assert received[0] == ("run", {
+        "mode": "funding_carry", "start": "2026-01-01", "end": "2026-01-02",
+        "interval": "1m", "starting_primary_balance": "200",
+        "starting_perpetual_balance": "300", "max_gross_notional": "500",
+    })
+    assert platform_research.main([
+        "basket-latest", "--mode", "funding_carry",
+    ]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "completed"
+    assert received[-1] == ("latest", {"mode": "funding_carry"})
