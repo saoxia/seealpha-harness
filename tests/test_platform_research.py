@@ -1,5 +1,6 @@
 """Task-scoped Platform CLI and resident Harness control contract."""
 import hashlib
+import json
 import time
 from uuid import uuid4
 
