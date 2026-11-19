@@ -1,5 +1,6 @@
 """Task-scoped Platform CLI and resident Harness control contract."""
 import hashlib
+import json
 import time
 from uuid import uuid4
 
@@ -269,3 +270,93 @@ def test_python_candidate_rejects_symlink_and_large_files(tmp_path):
         (path / "strategy.py").write_text("x" * (256 * 1024 + 1))
         with pytest.raises(ValueError):
             client.register_python_candidate(path)
+
+
+def test_basket_research_cli_client_is_task_scoped_and_never_supplies_live_context():
+    task_id = str(uuid4())
+    observed = []
+
+    def handler(request):
+        assert request.headers["authorization"] == "Bearer " + TOKEN
+        assert request.url.path.startswith(
+            f"/api/research/tasks/{task_id}/commands/basket_"
+        )
+        payload = json.loads(request.content)
+        assert set(payload) == {"arguments"}
+        assert not (set(payload["arguments"]) & {
+            "tenant_id", "account_id", "origin", "engine_token",
+            "api_key", "production", "execution",
+        })
+        observed.append((request.url.path, payload["arguments"]))
+        if request.url.path.endswith("basket_run"):
+            return httpx.Response(200, json={
+                "mode": "native_dual_venue_development_only", "fills": [],
+            })
+        return httpx.Response(200, json={"mode": "native_dual_venue_development_only"})
+
+    with PlatformResearchClient(
+        "https://platform.local", TOKEN, task_id, transport=httpx.MockTransport(handler),
+    ) as client:
+        result = client.run_basket_backtest(
+            mode="funding_carry", start="2026-01-01", end="2026-01-02",
+            interval="1m", starting_primary_balance="200",
+            starting_perpetual_balance="300", max_gross_notional="500",
+        )
+        assert result["fills"] == []
+        assert client.latest_basket_backtest(mode="funding_carry")["mode"].startswith("native_")
+        with pytest.raises(ValueError):
+            client.run_basket_backtest(
+                mode="production", start="2026-01-01", end="2026-01-02",
+                interval="1m", starting_primary_balance="200",
+                starting_perpetual_balance="300", max_gross_notional="500",
+            )
+        with pytest.raises(ValueError):
+            client.latest_basket_backtest(mode="production")
+        with pytest.raises(ValueError):
+            client._request("basket_live_order", {"symbol": "ETHUSDT"})
+    assert [path.rsplit("/", 1)[-1] for path, _ in observed] == [
+        "basket_run", "basket_latest",
+    ]
+
+
+def test_basket_cli_dispatches_run_and_latest_without_account_selectors(monkeypatch, capsys):
+    from seealpha_harness import platform_research
+
+    received = []
+
+    class Stub:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def run_basket_backtest(self, **kwargs):
+            received.append(("run", kwargs))
+            return {"status": "completed", "mode": "native_dual_venue_development_only"}
+
+        def latest_basket_backtest(self, **kwargs):
+            received.append(("latest", kwargs))
+            return {"status": "completed", "mode": "native_dual_venue_development_only"}
+
+    monkeypatch.setattr(
+        platform_research.PlatformResearchClient, "from_environment",
+        classmethod(lambda _cls: Stub()),
+    )
+    assert platform_research.main([
+        "basket-run", "--mode", "funding_carry",
+        "--start", "2026-01-01", "--end", "2026-01-02",
+        "--interval", "1m", "--primary-balance", "200",
+        "--perpetual-balance", "300", "--max-gross-notional", "500",
+    ]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "completed"
+    assert received[0] == ("run", {
+        "mode": "funding_carry", "start": "2026-01-01", "end": "2026-01-02",
+        "interval": "1m", "starting_primary_balance": "200",
+        "starting_perpetual_balance": "300", "max_gross_notional": "500",
+    })
+    assert platform_research.main([
+        "basket-latest", "--mode", "funding_carry",
+    ]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "completed"
+    assert received[-1] == ("latest", {"mode": "funding_carry"})
