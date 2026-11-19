@@ -8,7 +8,7 @@
 - **seealpha-harness（本仓库）**：Agent Runtime、会话、工具与 Skills、可编程研究沙箱、策略草稿、分析结果及可视化成果生成。
 - **seealpha-engine（`saoxia/seealpha-engine`）**：交易行情及 Catalog、研究/回测计算、风控、订单和执行事实。
 - 各服务**独立仓库、独立依赖、独立构建与部署**；通过可版本化服务/数据契约通信。禁止通过跨仓库 Python 源码导入、共享业务数据库或复制 Engine 算法来规避接口。
-- **2026-11-19 选定的默认 AI 研究调用链**：Harness → Platform 轻量研究代理 → Engine Research API。Harness 不直接获取 Engine Grant 或管理凭据；Platform 负责授权、代理和审计，Engine 自身仍需验证权限。独立 Gateway/MCP 仅为非必需实验实现。
+- **2026-11-20 AI 研究调用链**：Harness SDK MCP Client → Platform 任务级 MCP 代理 → Engine 原生 MCP。Harness 不直接获取 Engine Grant 或管理凭据；Platform 负责授权、代理和审计，Engine 自身仍需验证权限。独立 Gateway/MCP Bridge 仅为非必需实验实现，Parquet 二进制下载与候选打包继续通过受限 Platform CLI。
 - 用户使用的正式 AI Workspace 属于 SeeAlpha Web；本仓库定义流式事件、研究成果与必要的独立可视化内容，不维护第二套产品登录/租户体系。独立调试 UI 不等于正式产品前端。
 
 ## 研究自由度与安全边界
@@ -38,6 +38,6 @@
 
 ## 当前阶段
 
-当前已有**一个常驻 Docker 的单用户本地研究原型**：HTTP v1、官方 DeepSeek SDK、TaskManager 进程级 Worker、独立 Session/工作区、取消与超时、可追溯本地 Artifact v1 草稿；研究 Client、独立可信 Gateway 和可选 MCP Bridge 处于 Mock/接口开发阶段。原“每任务新建 Docker/网络”的未接线实验代码已清理；不允许因新任务或回测重新引入按任务创建容器的默认路径。详见 [常驻运行架构](docs/RESIDENT_RUNTIME.md)。
+当前已有**一个常驻 Docker 的单用户本地研究原型**：HTTP v1、官方 DeepSeek SDK、TaskManager 进程级 Worker、独立 Session/工作区、取消与超时、可追溯本地 Artifact v1 草稿；原研究 Client、独立 Gateway/MCP Bridge 属于旧参考实现；SDK 的任务级 Platform MCP profile 已接线，但真实跨服务模型/容器验收仍未完成。原“每任务新建 Docker/网络”的未接线实验代码已清理；不允许因新任务或回测重新引入按任务创建容器的默认路径。详见 [常驻运行架构](docs/RESIDENT_RUNTIME.md)。
 
 **特别注意**：常驻容器同 UID 的 Agent Shell 与控制面没有强安全隔离；不得把 Engine/Gateway 管理密钥、交易密钥或其他租户的数据放入其可读环境。真实 Platform/Engine 联调、可信模型代持及生产安全验证仍未完成。
