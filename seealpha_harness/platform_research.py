@@ -26,6 +26,7 @@ _MAX_SNAPSHOT = 16 * 1_048_576
 _COMMANDS = {
     "datasets", "snapshot_create", "snapshot_get", "snapshot_fetch",
     "backtest_submit", "backtest_get", "backtest_cancel",
+    "basket_run", "basket_latest",
     "candidate_create", "candidate_get", "candidate_submit",
     "python_candidate_create", "python_candidate_submit",
 }
@@ -84,7 +85,10 @@ class PlatformResearchClient:
         if len(json.dumps(arguments, allow_nan=False).encode()) > limit:
             raise ValueError("Research arguments too large")
         try:
-            with self.client.stream("POST", path, json={"arguments": arguments}) as response:
+            with self.client.stream(
+                "POST", path, json={"arguments": arguments},
+                timeout=180 if operation == "basket_run" else 30,
+            ) as response:
                 if response.is_redirect or response.status_code >= 400:
                     raise ResearchCommandError(
                         f"Platform refused research command (HTTP {response.status_code})"
@@ -160,6 +164,26 @@ class PlatformResearchClient:
             "start": start, "end": end, "starting_balance": starting_balance,
             "quote_currency": quote_currency, "idempotency_key": idempotency_key,
         })
+
+    def run_basket_backtest(
+        self, *, mode: str, start: str, end: str, interval: str,
+        starting_primary_balance: str, starting_perpetual_balance: str,
+        max_gross_notional: str,
+    ):
+        """A trusted Platform decides which task-bound virtual account may run."""
+        if mode not in {"funding_carry", "protected_options"}:
+            raise ValueError("Unknown basket research mode")
+        return self._request("basket_run", {
+            "mode": mode, "start": start, "end": end, "interval": interval,
+            "starting_primary_balance": starting_primary_balance,
+            "starting_perpetual_balance": starting_perpetual_balance,
+            "max_gross_notional": max_gross_notional,
+        })
+
+    def latest_basket_backtest(self, *, mode: str):
+        if mode not in {"funding_carry", "protected_options"}:
+            raise ValueError("Unknown basket research mode")
+        return self._request("basket_latest", {"mode": mode})
 
     def register_candidate(self, path: Path, *, name="ai_candidate", title="AI Candidate",
                            version="1"):
@@ -276,6 +300,18 @@ def main(argv=None):
             cmd.add_argument("--starting-balance", required=True)
             cmd.add_argument("--quote-currency", required=True)
             cmd.add_argument("--idempotency-key", required=True)
+    basket = commands.add_parser(
+        "basket-run", help="Synchronous, task-scoped one-day basket simulation",
+    )
+    basket.add_argument("--mode", required=True, choices=("funding_carry", "protected_options"))
+    basket.add_argument("--start", required=True)
+    basket.add_argument("--end", required=True)
+    basket.add_argument("--interval", required=True, choices=("1m", "5m"))
+    basket.add_argument("--primary-balance", required=True)
+    basket.add_argument("--perpetual-balance", required=True)
+    basket.add_argument("--max-gross-notional", required=True)
+    latest_basket = commands.add_parser("basket-latest")
+    latest_basket.add_argument("--mode", required=True, choices=("funding_carry", "protected_options"))
     for name in ("snapshot-get", "snapshot-fetch", "backtest-get", "backtest-cancel",
                  "candidate-get"):
         commands.add_parser(name).add_argument("--id", required=True)
@@ -320,6 +356,16 @@ def main(argv=None):
                     quote_currency=args.quote_currency,
                     idempotency_key=args.idempotency_key,
                 )
+            elif args.command == "basket-run":
+                result = client.run_basket_backtest(
+                    mode=args.mode, start=args.start, end=args.end,
+                    interval=args.interval,
+                    starting_primary_balance=args.primary_balance,
+                    starting_perpetual_balance=args.perpetual_balance,
+                    max_gross_notional=args.max_gross_notional,
+                )
+            elif args.command == "basket-latest":
+                result = client.latest_basket_backtest(mode=args.mode)
             elif args.command == "backtest-get":
                 result = client.get_backtest(args.id)
             elif args.command == "backtest-cancel":
