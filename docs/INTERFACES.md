@@ -47,9 +47,9 @@
 
 401 未认证、403 越权/能力不足、404 不可见资源、409 状态冲突、422 参数无效、429 配额耗尽、503 下游不可用；公开错误不可泄露内部地址与密钥。错误码和请求字段在 v1 实施时定稿并添加合同测试。
 
-## 2. Harness ↔ Engine：研究能力合同（拟新增）
+## 2. Harness → Platform → Engine：研究能力合同（选定架构，待接线）
 
-**当前 SeeAlpha Engine 的 HTTP v2 是内部服务合同，尚不等于可交付给 AI 的细粒度研究授权。** 不允许给 Harness 通用 Engine Token 后直接调用现有全部接口。
+**默认研究命令经 Platform 的轻量授权代理访问 Engine 独立研究 HTTP v1**；现有 Engine HTTP v2 是内部管理合同，尚不等于可交付给 AI 的细粒度研究授权。 不允许给 Harness 通用 Engine Token 后直接调用现有全部接口。
 
 拟议的最小研究能力：
 
@@ -61,11 +61,11 @@
 | `backtests.get` | 获取任务状态、报告/成交/权益及可验证结果 |
 | `backtests.cancel` | 尝试取消，维护 Engine 的真实终态 |
 
-独立 [seealpha-engine Research API](https://github.com/saoxia/seealpha-engine/blob/main/docs/RESEARCH_API.md) 已实现默认关闭的 `/research/v1/*` 路由，版本头为 `X-SeeAlpha-Research-Contract-Version: 1`。Harness 仓库有匹配客户端与模拟契约测试；**Platform 真实研究授权签发、隔离工具网关和跨仓库联调仍未实现**。不得把该客户端连到生产通用 Engine API。详细请求和响应参见 [ENGINE_RESEARCH_CLIENT.md](ENGINE_RESEARCH_CLIENT.md)。
+独立 [seealpha-engine Research API](https://github.com/saoxia/seealpha-engine/blob/main/docs/RESEARCH_API.md) 已实现默认关闭的 `/research/v1/*` 路由，版本头为 `X-SeeAlpha-Research-Contract-Version: 1`。Harness 仓库有匹配客户端与模拟契约测试；**Platform 真实研究任务控制面、Agent 命令代理和跨仓库联调仍未实现**。不得把该客户端连到生产通用 Engine API。详细请求和响应参见 [ENGINE_RESEARCH_CLIENT.md](ENGINE_RESEARCH_CLIENT.md)。
 
 数据量小时允许查询 API；海量 Tick/Bar/期权数据优先使用具有时效/哈希/范围/权限约束的 Arrow/Parquet 快照或等效数据通道。Harness 在自身沙箱中使用 Python/DuckDB/Polars，自由研究因子和算法。Engine 自己负责回测计算及报告事实。
 
-研究路由要求固定开发租户、独立签名密钥和范围受限的短期 grant，默认不开启。不能因为 Engine 研究服务端代码已经合并就把研究凭据给 Agent Shell；Platform 尚需实现可信授权签发，并先隔离执行与工具网关。
+研究路由要求固定开发租户、独立签名密钥和范围受限的短期 grant，默认不开启。不能因为 Engine 研究服务端代码已经合并就把研究凭据给 Agent Shell；Platform 尚需实现可信授权签发，并先隔离执行与 Platform 的受限命令接口。
 
 ## 3. Harness → SeeAlpha Web：Research Artifact v1（拟议）
 
