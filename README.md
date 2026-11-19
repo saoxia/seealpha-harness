@@ -2,7 +2,7 @@
 
 SeeAlpha 的独立 **AI 量化研发服务**，用于策略开发、数据研究、开发回测、结果分析与可视化。它不是交易执行服务，也不维护 SeeAlpha 的用户/租户体系或正式产品 Web。
 
-> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与**本地 Research Artifact v1 草稿**已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
+> **选定架构（2026-11-19）**：AI Harness → SeeAlpha Platform 轻量研究代理 → Engine Research API，不再依赖独立 Gateway/MCP Bridge。Platform 已提交直接研究客户端（尚未连接 Agent 的真实任务 API），此仓库不因架构选定自动获得 Engine 回测能力。详见 [Platform 简化方案](https://github.com/saoxia/SeeAlpha/blob/main/docs/DIRECT_AI_RESEARCH.md)。\n\n> **当前阶段：单用户、本地开发原型。** Harness 使用**一个常驻 Docker 容器**，每个研究任务只启动独立 Python Worker 进程和工作区，**不会创建新的 Docker 容器或网络**；目前同一时间只运行一个研究任务。HTTP v1、DeepSeek Harness Python SDK、持久化 Session、取消、事件流与**本地 Research Artifact v1 草稿**已实现。研究 Gateway/MCP 尚未联调启用，**不具备多租户强隔离或生产实盘资格**。
 
 ## 项目边界
 
@@ -80,7 +80,7 @@ python -m compileall -q seealpha_harness
 
 **重要**：独立 Engine 已有默认关闭的 Research HTTP v1 路由；但这些工具尚未接入官方 Agent SDK，也没有 Platform 授权签发及隔离的凭据代理。不能把 Engine 研究令牌注入现有不可信 Shell。详细接口与缺口见 [Engine Research Client](docs/ENGINE_RESEARCH_CLIENT.md)。本阶段不进行实机部署或真实模型调用。
 
-## Trusted Research Gateway（代码与 Mock 合同已实现）
+## 历史实验组件：Trusted Research Gateway（不再是默认链路）
 
 新增独立服务入口 `seealpha_harness.gateway_api:app` 和 [网关隔离设计](docs/GATEWAY.md)：
 
@@ -92,7 +92,7 @@ python -m compileall -q seealpha_harness
 
 **当前不会自动启用网关**：原 `compose.yaml`、Harness API 和 Agent Worker 不会自动加载此服务，也不会收到 Engine Grant 或网关控制令牌。需要先实现真实 Platform 授权签发、控制器/Agent 的不同权限身份与网络隔离，才可接通 Agent Tools。此阶段仍只进行自动化模拟测试，不进行实际机器验收。
 
-## MCP Research Bridge（开发代码与 Mock 验证）
+## 历史实验组件：MCP Research Bridge（不再是默认链路）
 
 新增 [任务级 MCP Bridge](docs/MCP_BRIDGE.md)：Gateway 为每个研究任务签发独立的桥接令牌，仅供独立 Sidecar 使用；Agent 不接触 Engine 或 Gateway 管理凭据，通过官方 DeepSeek Harness MCP 客户端发现七项研究工具，在自身隔离的 Python/Shell 环境里分析数据和开发策略。
 

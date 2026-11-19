@@ -1,6 +1,6 @@
-# Engine Research Client — Engine v1 server available, integration pending
+# Engine Research Client — 历史直连组件（默认通过 Platform 代理）
 
-> This is the **Harness client and mock contract tests**. Independent [seealpha-engine Research API v1](https://github.com/saoxia/seealpha-engine/blob/main/docs/RESEARCH_API.md) is now implemented **opt-in, default disabled**, but Platform grant issuance, isolated Harness tool gateway and cross-service acceptance have **not** been implemented. Do not point it at a trading/production Engine.
+> **Selected architecture (2026-11-19): Harness → Platform narrow research proxy → Engine Research API.** The local `EngineResearchClient` remains a mocked protocol reference, not the selected Agent credential path; there is no production model/tool wiring yet.\n\n> This is the **Harness client and mock contract tests**. Independent [seealpha-engine Research API v1](https://github.com/saoxia/seealpha-engine/blob/main/docs/RESEARCH_API.md) is now implemented **opt-in, default disabled**, but Platform grant issuance, isolated Harness tool gateway and cross-service acceptance have **not** been implemented. Do not point it at a trading/production Engine.
 
 ## Trust boundary
 

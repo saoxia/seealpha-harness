@@ -1,6 +1,6 @@
 # 常驻 Harness Docker 运行模式（单用户开发）
 
-> **选定方案，不是生产多租户安全验收。** 常驻 Docker `harness` 一次启动、多次复用；创建、续接、取消任务或提交 Engine 回测**都不启动新 Docker**。已增加显式选择的持久 FIFO 待运行队列，**同时仍只执行一个 Worker**；不创建新 Docker。
+> **2026-11-19 研究调用简化**：正式路径选定为 Harness → Platform 轻量研究代理 → Engine。独立 Gateway/MCP Bridge 为非必需实验组件；当前任务管理器尚未调用 Platform 研究命令。\n\n> **选定方案，不是生产多租户安全验收。** 常驻 Docker `harness` 一次启动、多次复用；创建、续接、取消任务或提交 Engine 回测**都不启动新 Docker**。已增加显式选择的持久 FIFO 待运行队列，**同时仍只执行一个 Worker**；不创建新 Docker。
 
 ## 容器与任务生命周期
 

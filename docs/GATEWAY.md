@@ -1,4 +1,4 @@
-# Trusted Research Tool Gateway（开发实现）
+# Trusted Research Tool Gateway（保留的非默认实验组件）\n\n> **2026-11-19**：SeeAlpha 已选用 Harness → Platform 轻量研究代理 → Engine，Gateway 不再是 AI 闭环前置依赖。本文仅描述历史实验实现，当前无产品运行时接入。
 
 > **实现范围**：独立网关的 HTTP 契约、任务内存授权登记、工具白名单、预算限制、受控快照转交及模拟测试。**尚未**接入 Agent SDK 或 Platform 研究授权签发；未进行真实 Engine、DeepSeek、跨仓库/实机验收。不要把本模块当作可直接开放给客户的安全沙箱。
 

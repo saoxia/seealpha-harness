@@ -1,4 +1,4 @@
-# 任务级 MCP Bridge — 安全接入说明
+# 任务级 MCP Bridge — 非默认实验设计\n\n> **2026-11-19**：SeeAlpha 默认改为 Harness → Platform 轻量研究代理 → Engine，本 Bridge 无需部署也不属于 AI 回测闭环前置条件。仅保留历史实现、测试与外部 Agent 兼容参考。
 
 > 当前仅为开发代码、Mock 合同与可选独立服务构建材料；**正式 Harness 采用一个常驻容器，不会每任务启动 Agent/Bridge Docker**。此桥接未接入单容器 TaskManager，没有真实模型、真实 Engine 或实机验收。
 

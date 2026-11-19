@@ -15,9 +15,9 @@
 ## 控制面 / 研究计算与数据面
 
 - **控制面**：浏览器 → SeeAlpha Web → Platform API → Harness 的认证任务 API。Platform 绑定用户和租户，裁决哪些数据/计算/工具可以使用，记录审批及任务审计。
-- **研究计算与数据面**：Harness 按已授权的研究能力 → Engine Research API（已在独立 Engine 中提供默认关闭的研究 HTTP v1），获取可用数据和质量信息，提交开发回测、读取结果；必要时通过受限数据快照直接读取 Arrow/Parquet，而不是把海量 Tick 作为聊天 JSON 中转。
+- **选定研究调用链（2026-11-19）**：Harness 调用 Platform 的受限研究命令，Platform 在可信控制面使用开发租户的短期 Research Grant 直接请求 Engine Research API（默认关闭）。大数据只通过有界、校验哈希、任务隔离的只读快照转交，不能把密钥或大规模 Tick 推送给浏览器。该任务级接线尚未实现。
 - Harness 不持有 Engine 的通用内部 Bearer token，也不直接访问生产交易入口。Engine 必须自己校验租户、目的、资源范围、期限和能力；不能只信任 Harness 声称的租户 ID。
-- **网关实现阶段**：已实现一个独立的 Trusted Research Gateway HTTP 入口（[设计与限制](GATEWAY.md)），可在 Mock 测试中登记短期授权、限制工具、转交数据；Platform 签发、真正独立部署与 SDK 工具接入尚未实现。不得凭此假装安全联调完成，也不允许交给 Agent 通用 Engine v2 凭据。
+- **历史实验代码**：独立 [Gateway](GATEWAY.md) 和 [MCP Bridge](MCP_BRIDGE.md) 已有 Mock 测试，但不再属于默认架构；其保留不代表已接入正式任务。Platform 内部直接研究客户端仍需完成真实任务授权、Agent 命令、数据转交和联调。
 - 数据不可用、版本不兼容、授权失效时应明确失败；不得自动回退到生产数据卷或另一个租户的数据。
 
 ## AI 研究能力不预设上限
@@ -60,9 +60,9 @@ Engine 的稳定接口聚焦**数据发现、可追溯的数据获取、回测�
 
 Harness 内部可以自主规划和多轮实验；关键资产与交易权限仍由独立信任边界把关。
 
-## Agent ↔ Research Tools（MCP Bridge 开发阶段）
+## Agent ↔ Platform 研究命令（选定方向，待接线）
 
-已增加 [任务绑定 MCP Bridge](MCP_BRIDGE.md) 与 SDK Patch 作为研究工具协议实验，但**当前常驻 Harness Docker 不启用这些特权工具**。原每任务 Agent/Sidecar Docker 编排已移除。若未来接入 MCP，须使用外部可信安全边界代持授权，不能让自由 Shell 直接读取 Engine/Gateway 密钥；Platform 侧授权和端到端联调仍未完成。
+默认采用 Harness → Platform 轻量代理 → Engine 固定研究操作，且**不将 Engine/Gateway 管理或研究凭据注入 Agent Shell**。旧 [任务绑定 MCP Bridge](MCP_BRIDGE.md) 与 SDK Patch 仅是未启用实验，不作为交付前置条件。未来如需支持外部 Agent，可另选 MCP Adapter；当前 Platform 任务控制面与跨仓库联调仍未完成。
 
 ## 发布与故障语义
 

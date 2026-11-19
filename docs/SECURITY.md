@@ -27,9 +27,9 @@
 - **不要把模型 API Key 或其他高价值凭据直接注入可任意执行 Shell 的进程环境。** 优先使用由可信网关代持密钥、配额化的模型访问能力；在实现前明确残余泄露风险。
 - 持久状态、Session、日志、输入提示词、工具记录与输出成果均按租户隔离，设置访问审计与保留/删除政策；不记录明文 Token。注意上游 SDK Profile 可能把会话内容纳入后续模型请求。
 
-## 独立 Trusted Research Gateway（开发实现）
+## 默认 Platform 轻量研究代理；旧 Gateway 为实验代码
 
-本项目新增 [Gateway](GATEWAY.md)：独立 `gateway_api:app` 入口、独立服务控制令牌、短期 Engine 任务 Grant 的范围一致性校验、工具白名单和调用预算。**仅凭网关代码不能保护同容器同 UID 的 Agent Shell**，必须在部署时保持 Gateway/Agent 不同权限主体且无共享凭据卷。Platform 尚未实现真实 Grant 签发，SDK 工具桥接未启用，研究文件留存/撤销语义仍需完善。
+已选定 Harness → Platform 受限研究命令 → Engine Research API。Platform 代持短期 Engine Grant 并在可信服务端强制任务、租户、资源与调用预算；Agent Shell 不获得 Engine Grant/管理令牌。**轻量代理不是可绕过的权限边界**：Agent 仍可自由运行 Shell，须将其网络权限限制到明确授权的研究操作。旧 [Gateway](GATEWAY.md) / [MCP Bridge](MCP_BRIDGE.md) 是默认关闭的实验代码，不再要求部署；真实任务签发、隔离与审计还未完成。
 
 ## Engine 与数据接入
 
