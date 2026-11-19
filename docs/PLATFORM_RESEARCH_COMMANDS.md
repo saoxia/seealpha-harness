@@ -69,3 +69,23 @@ python -m seealpha_harness.platform_research backtest-get --id BACKTEST_ID
 ## MCP 任务模式验证说明
 
 Platform 每次 MCP 调用重新验证 Task、Turn、租户/账户/数据集授权、调用预算、撤销状态；Engine 每次使用操作级短期 Grant 验证。MCP JSON 只承载固定操作及元数据，不处理 Parquet 二进制、任意 URL、Shell 或订单。Agent 不获得 Engine 管理令牌、Engine Grant 或签名密钥。MCP 不可用时不自动回退旧 REST；生产部署前必须在隔离开发主机验证 DeepSeek SDK 与三个服务的真实协议协商、候选策略回测和取消/恢复。
+
+## 跨产品组合回测（受任务授权的开发研究）
+
+通过任务 Capability 在 Platform MCP 使用 `run_basket_backtest` /
+`get_latest_basket_backtest`，或用同一授权调用 Harness 固定 CLI：
+
+```bash
+python -m seealpha_harness.platform_research basket-run \
+  --mode funding_carry --start 2026-01-01 --end 2026-01-02 \
+  --interval 1m --primary-balance 400 --perpetual-balance 400 \
+  --max-gross-notional 800
+python -m seealpha_harness.platform_research basket-latest --mode funding_carry
+```
+
+`--mode` 还可取 `protected_options`（必须已有授权双翼期权 Demo 和完整
+Options/UM 历史产品策略）。CLI 不允许传入任意 `tenant_id`、
+`account_id`、实盘开关或 Engine 管理凭据；Platform 每次重新绑定任务所有者、
+开发租户、账户、历史产品策略和实际加载的系统 Demo。同步研究窗口上限是
+**一天**，只保留已有 Nautilus 模拟撮合和源自交易记录的结果。
+无真实订单、无生产授权，不等同于 #107 A/B/C/D 全部验收。
