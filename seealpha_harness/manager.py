@@ -9,6 +9,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from threading import RLock, Thread
 
 from .settings import Settings
@@ -43,7 +44,7 @@ class TaskManager:
         with self.lock:
             self._dispatch_next()
 
-    def _environment(self) -> dict:
+    def _environment(self, task_id: str | None = None) -> dict:
         # Do not pass Platform/Engine credentials or the HTTP control token.
         allowed = (
             "PATH", "HOME", "LANG", "LC_ALL", "XDG_CACHE_HOME", "XDG_CONFIG_HOME",
@@ -58,6 +59,15 @@ class TaskManager:
             "HARNESS_PROFILE": self.settings.profile,
             "PYTHONUNBUFFERED": "1",
         })
+        if task_id is not None:
+            path = self.store.research_path(task_id)
+            if path.exists() and not path.is_symlink():
+                access = json.loads(path.read_text(encoding="utf-8"))
+                if access["expires_at"] <= time.time():
+                    raise ValueError("Research access expired before task launch")
+                env["SEEALPHA_PLATFORM_RESEARCH_ORIGIN"] = access["origin"]
+                env["SEEALPHA_PLATFORM_RESEARCH_TOKEN"] = access["token"]
+                env["SEEALPHA_PLATFORM_RESEARCH_TASK_ID"] = task_id
         return env
 
     def queue_state(self) -> dict:
@@ -78,24 +88,37 @@ class TaskManager:
         if len(pending) >= self.settings.max_queued_tasks:
             raise QueueFullError("Research queue capacity reached")
 
-    def create(self, prompt: str, *, queue_if_busy: bool = False) -> dict:
+    def create(self, prompt: str, *, queue_if_busy: bool = False,
+               task_id: str | None = None, research_access: dict | None = None) -> dict:
         with self.lock:
             if self.stopping:
                 raise BusyError("Research service is stopping")
             self._admit(queue_if_busy=queue_if_busy)
-            task = self.store.create(prompt, queue_managed=True)
+            if research_access is not None and (task_id is None or queue_if_busy):
+                raise ConflictError("Research access requires an immediate bound task")
+            task = self.store.create(prompt, queue_managed=True, task_id=task_id)
+            if research_access is not None:
+                self.store.configure_research(task["id"], research_access)
+                self.store.change(task["id"], research_enabled=True)
             self.store.append_event(task["id"], "progress", {"stage": "queued"})
             self._dispatch_next()
             return self.store.get(task["id"])
 
-    def continue_task(self, task_id: str, prompt: str, *, queue_if_busy: bool = False) -> dict:
+    def continue_task(self, task_id: str, prompt: str, *, queue_if_busy: bool = False,
+                      research_access: dict | None = None) -> dict:
         with self.lock:
             if self.stopping:
                 raise BusyError("Research service is stopping")
             task = self.store.get(task_id)
             if task["status"] != "completed":
                 raise ConflictError("Only completed Sessions may be continued")
+            if task.get("research_enabled") is True and research_access is None:
+                raise ConflictError("Research continuation requires a fresh task capability")
+            if research_access is not None and queue_if_busy:
+                raise ConflictError("Research access requires immediate execution")
             self._admit(queue_if_busy=queue_if_busy)
+            if research_access is not None:
+                self.store.configure_research(task_id, research_access)
             self.store.change(
                 task_id, prompt=prompt, status="queued", mode="resume",
                 turn=task["turn"] + 1, final_response=None, error=None,
@@ -135,10 +158,10 @@ class TaskManager:
         try:
             with open(os.devnull, "wb") as sink:
                 proc = subprocess.Popen(
-                    command, env=self._environment(), cwd=self.store.workspace(task_id),
+                    command, env=self._environment(task_id), cwd=self.store.workspace(task_id),
                     stdin=subprocess.DEVNULL, stdout=sink, stderr=sink, start_new_session=True,
                 )
-        except OSError:
+        except (OSError, ValueError, KeyError):
             self.store.change(task_id, status="failed", error="worker_start_failed")
             self.store.append_event(task_id, "terminal", {
                 "status": "failed", "error": "worker_start_failed",
@@ -191,6 +214,7 @@ class TaskManager:
             if task["status"] not in TERMINAL:
                 self.store.change(task_id, status=status, error=error, final_response=response)
                 self.store.append_event(task_id, "terminal", {"status": status, "error": error})
+            self.store.research_path(task_id).unlink(missing_ok=True)
             self.active.pop(task_id, None)
             self.watchers.pop(task_id, None)
             self._dispatch_next()

@@ -61,8 +61,19 @@ class TaskStore:
     def events_path(self, task_id: str) -> Path:
         return self.root / "jobs" / (task_id_checked(task_id) + ".events.jsonl")
 
-    def create(self, prompt: str, *, queue_managed: bool = False) -> dict:
-        task_id = str(uuid4())
+    def research_path(self, task_id: str) -> Path:
+        return self.root / "jobs" / (task_id_checked(task_id) + ".research.json")
+
+    def configure_research(self, task_id: str, access: dict) -> None:
+        if self.research_path(task_id).is_symlink():
+            raise ValueError("Research access file cannot be a symlink")
+        atomic_json(self.research_path(task_id), access)
+
+    def create(self, prompt: str, *, queue_managed: bool = False,
+               task_id: str | None = None) -> dict:
+        task_id = task_id_checked(task_id) if task_id is not None else str(uuid4())
+        if self.path(task_id).exists() or self.path(task_id).is_symlink():
+            raise ValueError("Research task already exists")
         self.workspace(task_id).mkdir(mode=0o700)
         self.home(task_id).mkdir(mode=0o700)
         task = {
