@@ -20,4 +20,31 @@ CLI 只调用 Platform `/api/research/tasks/{task_id}/commands/...`，不持有 
 
 **安全限制**：任务级 Platform Capability 在自由 Shell 同 UID 的 Worker 环境可读取，因而这只是受限开发研究能力，不是对恶意 Agent 的强隔离。Platform 对任务、租户、资源、每次调用预算、状态和用途进行后端校验；Engine 仍独立 HMAC 验证。严禁注入生产账户/交易密钥、Engine 管理令牌，或通过 CLI 开放任意 HTTP/Shell 远程执行。
 
-配置与 Engine 密钥/历史数据要求见 [SeeAlpha Platform 文档](https://github.com/saoxia/SeeAlpha/blob/main/docs/AI_RESEARCH_COMMANDS.md)。AI 生成任意新策略代码仍不能直接回测，需要独立增加候选代码隔离加载。
+
+## AI 候选版本（受限代码，不执行任意 Python）
+
+创建文件 `candidate.py`，内容必须**只有** `CANDIDATE = {...}` 一条 Python 字面量赋值。示例：
+
+```python
+CANDIDATE = {
+    "kind": "ema_cross",
+    "symbol": "ETHUSDT",
+    "fast_period": 8,
+    "slow_period": 21,
+    "allocation": "1",
+    "risk_limit": "1",
+}
+```
+
+AI 可修改 `kind`（`ema_cross/ema_revert/sma_cross/sma_revert`）、周期和额度；不能加入 `import`、函数、类、任意系统调用或第三方依赖。然后通过 CLI 进行候选创建及开发模拟回测：
+
+```bash
+python -m seealpha_harness.platform_research candidate-create --file candidate.py --name research_ema --version 1
+python -m seealpha_harness.platform_research candidate-get --id CANDIDATE_ID
+python -m seealpha_harness.platform_research candidate-submit --id CANDIDATE_ID --start 2026-01-01 --end 2026-01-02 --starting-balance 1000 --quote-currency USDT --idempotency-key iteration-1
+python -m seealpha_harness.platform_research backtest-get --id BACKTEST_ID
+```
+
+`candidate-create` 自动封装包含 `strategy.py` 和 `seealpha-package.json` 的受限 ZIP；Platform 持久化原始包及 SHA-256，Engine 再静态验证，使用自身可信策略类回测。失败与未完成不可描述为回测成功。每次修改建立新候选版本，不覆盖历史。**这只是 AI 策略规则/参数实验闭环的第一阶段，不是任意生成 Python 的安全沙箱。**
+
+配置与 Engine 密钥/历史数据要求见 [SeeAlpha Platform 文档](https://github.com/saoxia/SeeAlpha/blob/main/docs/AI_RESEARCH_COMMANDS.md)。AI 生成任意 Python 策略类仍不能直接执行，后续要先建立强隔离执行环境。

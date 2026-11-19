@@ -128,3 +128,61 @@ def test_platform_client_refuses_redirect_invalid_origin_and_cross_server_calls(
             client.datasets()
         with pytest.raises(ValueError):
             client._request("shell", {"command": "rm -rf /"})
+
+
+def test_candidate_cli_package_and_submit_are_fixed_and_checksum_bound(tmp_path):
+    import base64
+    import io
+    import json
+    import zipfile
+
+    source = tmp_path / "candidate.py"
+    source.write_text(
+        "CANDIDATE = {'kind':'ema_revert','symbol':'ETHUSDT','fast_period':8,"
+        "'slow_period':21,'allocation':'1','risk_limit':'1'}\n",
+        encoding="utf-8",
+    )
+    task_id = str(uuid4())
+    registered = {}
+    calls = []
+
+    def handler(request):
+        assert request.headers["authorization"] == "Bearer " + TOKEN
+        payload = json.loads(request.content)["arguments"]
+        calls.append(request.url.path)
+        if request.url.path.endswith("/candidate_create"):
+            raw = base64.b64decode(payload["archive"], validate=True)
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                assert "ema_revert" in archive.read("strategy.py").decode()
+                manifest = json.loads(archive.read("seealpha-package.json"))
+                assert manifest["entry_point"] == "strategy:CANDIDATE"
+            registered["sha256"] = hashlib.sha256(raw).hexdigest()
+            return httpx.Response(200, json={
+                "candidate_id": "a" * 32, "package_hash": registered["sha256"],
+            })
+        if request.url.path.endswith("/candidate_submit"):
+            assert payload["candidate_id"] == "a" * 32
+            assert payload["idempotency_key"] == "iteration-2"
+            return httpx.Response(202, json={"backtest_id": "b" * 32, "status": "queued"})
+        return httpx.Response(200, json={"candidate_id": "a" * 32})
+
+    with PlatformResearchClient(
+        "https://platform.local", TOKEN, task_id,
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        created = client.register_candidate(source, version="2")
+        assert created["package_hash"] == registered["sha256"]
+        result = client.submit_candidate(
+            candidate_id=created["candidate_id"], start="2026-01-01",
+            end="2026-01-02", starting_balance="1000",
+            quote_currency="USDT", idempotency_key="iteration-2",
+        )
+        assert result["status"] == "queued"
+        assert client.get_candidate(created["candidate_id"])["candidate_id"] == created["candidate_id"]
+    assert len(calls) == 3
+    with PlatformResearchClient(
+        "https://platform.local", TOKEN, task_id,
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(ValueError):
+            client.register_candidate(source, name="../../evil")

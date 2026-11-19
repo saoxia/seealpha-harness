@@ -63,7 +63,21 @@ def execute(task_id: str, store: TaskStore, *, runtime_factory=None) -> int:
                     "backtest-cancel --id ID. Never print environment variables "
                     "or tokens. All operations are simulation-only, and only "
                     "pre-issued development strategies can be backtested. "
-                    "Do not claim generated code has been backtested.\\n\\n"
+                    "Existing backtest-submit runs pre-issued strategies only. "
+                    "For a NEW AI candidate write a restricted strategy.py file "
+                    "containing ONLY a single Python literal assignment: "
+                    "CANDIDATE = {'kind':'ema_cross','symbol':'ETHUSDT',"
+                    "'fast_period':8,'slow_period':21,'allocation':'1',"
+                    "'risk_limit':'1'}. Allowed kinds: ema_cross, ema_revert, "
+                    "sma_cross, sma_revert. No imports, functions, classes, "
+                    "arbitrary Python or system calls are supported. "
+                    "Run candidate-create --file strategy.py, then candidate-submit "
+                    "--id CANDIDATE_ID --start YYYY-MM-DD --end YYYY-MM-DD "
+                    "--starting-balance 1000 --quote-currency USDT "
+                    "--idempotency-key UNIQUE. Poll with backtest-get --id BACKTEST_ID. "
+                    "Each modified candidate creates a new immutable hash and ID. "
+                    "Never claim arbitrary generated Python executed in Engine, "
+                    "and never claim a backtest succeeded without a completed result.\\n\\n"
                     + prompt
                 )
             result = session.run(prompt, on_notification=on_notification)
