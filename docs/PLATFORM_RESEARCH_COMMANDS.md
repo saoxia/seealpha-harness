@@ -8,6 +8,8 @@ SeeAlpha 的选定路径是 **Agent MCP Client（常驻 Harness）→ Platform �
 
 已获任务权限时，Worker 动态生成 SDK 的 `@deepseek-ai/dsh-mcp-client` 配置文件，使用环境中的 Platform 任务能力作为 HTTP Authorization Bearer，连接 `POST /api/research/tasks/{task_id}/mcp`。Agent 可以直接发现并调用 `list_datasets`、`create_snapshot`、`get_snapshot`、`submit_backtest`、`get_backtest`、`cancel_backtest`、`submit_candidate_backtest`，并在额外开启可信 Python 开发回测时使用 `submit_python_candidate_backtest`。
 
+产品类型不由 Harness 设置商业化白名单。研究数据集由 Platform 按开发租户的历史订阅与实际数据范围授权：可以选择永续、现货、期权等已存在的 Catalog 数据源；但当前任务仍只绑定一个数据集，普通/候选开发模拟回测只实现永续与现货的 1m/5m 路径，期权的通用 Python 策略模拟、跨产品任意候选和多数据集任务合同尚未实现。现有期权+永续受控 Demo 走独立的 `protected_options` basket 路径。交易安全/生产授权与未来商业化套餐限制是不同机制，不应在 Harness 写死产品白名单。
+
 仅候选打包登记和 Parquet 二进制下载仍需 Shell 执行 `python -m seealpha_harness.platform_research`。原固定 CLI 子命令保持兼容：
 
 - `datasets`
